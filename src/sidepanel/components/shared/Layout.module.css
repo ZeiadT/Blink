@@ -1,0 +1,126 @@
+.layout {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  width: 100%;
+  background: var(--color-bg-primary);
+  overflow: hidden;
+}
+
+/* ── Header ── */
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-3) var(--space-4);
+  border-bottom: var(--border-width) solid var(--border-color);
+  background: var(--color-bg-secondary);
+  flex-shrink: 0;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.logoMark {
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-sm);
+  background: linear-gradient(135deg, var(--color-accent), #a855f7);
+  box-shadow: 0 0 12px rgba(108, 92, 231, 0.3);
+}
+
+.logoText {
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-primary);
+  letter-spacing: -0.02em;
+}
+
+/* ── Content Area ── */
+.content {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* ── Tab Bar ── */
+.tabBar {
+  display: flex;
+  align-items: stretch;
+  border-top: var(--border-width) solid var(--border-color);
+  background: var(--color-bg-secondary);
+  flex-shrink: 0;
+  padding: var(--space-1) var(--space-2);
+  gap: var(--space-1);
+}
+
+.tab {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: var(--space-2) var(--space-1);
+  border: none;
+  background: transparent;
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+  border-radius: var(--radius-md);
+  transition: all var(--transition-fast);
+  position: relative;
+  font-family: var(--font-family);
+}
+
+.tab:hover {
+  color: var(--color-text-secondary);
+  background: var(--color-glass-hover);
+}
+
+.tabActive {
+  color: var(--color-accent);
+}
+
+.tabActive:hover {
+  color: var(--color-accent);
+}
+
+.tabIcon {
+  transition: transform var(--transition-fast);
+}
+
+.tabActive .tabIcon {
+  transform: scale(1.1);
+}
+
+.tabLabel {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  line-height: 1;
+}
+
+.tabIndicator {
+  position: absolute;
+  bottom: 2px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 16px;
+  height: 2px;
+  border-radius: var(--radius-full);
+  background: var(--color-accent);
+  animation: scaleIn var(--transition-fast) ease forwards;
+}
+
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) scaleX(0);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) scaleX(1);
+  }
+}

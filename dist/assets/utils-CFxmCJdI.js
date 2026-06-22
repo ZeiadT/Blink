@@ -1,0 +1,2 @@
+function e(){return crypto.randomUUID()}function t(e){if(e===0)return`0 B`;let t=1024,n=[`B`,`KB`,`MB`,`GB`],r=Math.floor(Math.log(e)/Math.log(t));return`${parseFloat((e/t**r).toFixed(1))} ${n[r]}`}function n(e,t){return e.length<=t?e:e.slice(0,t-1)+`…`}export{e as n,n as r,t};
+//# sourceMappingURL=utils-CFxmCJdI.js.map

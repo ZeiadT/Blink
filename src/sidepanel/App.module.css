@@ -1,0 +1,46 @@
+.tabPanel {
+  padding: var(--space-4);
+  animation: fadeInUp var(--transition-base) ease forwards;
+}
+
+.placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 300px;
+  text-align: center;
+  gap: var(--space-3);
+}
+
+.placeholderTitle {
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+}
+
+.placeholderText {
+  font-size: var(--font-size-base);
+  color: var(--color-text-tertiary);
+}
+
+.disclaimer {
+  margin-top: var(--space-8);
+  padding: var(--space-3) var(--space-4);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-tertiary);
+  border-top: var(--border-width) solid var(--border-color);
+  max-width: 280px;
+  line-height: var(--line-height-normal);
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
