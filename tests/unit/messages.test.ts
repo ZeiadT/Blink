@@ -44,6 +44,7 @@ const mockCampaign: Campaign = {
   groupListId: 'list-1',
   status: 'running',
   currentIndex: 0,
+  totalGroups: 3,
   results: [],
   startedAt: 1000,
   settings: mockSettings,

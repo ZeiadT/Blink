@@ -21,12 +21,20 @@ const TAB_LABELS: Record<TabId, string> = {
 interface LayoutProps {
   activeTab: TabId;
   onTabChange: (tab: TabId) => void;
+  badges?: Partial<Record<TabId, number | string>>;
+  statusDots?: Partial<Record<TabId, 'running' | 'paused'>>;
   children: React.ReactNode;
 }
 
 const TAB_ORDER: TabId[] = ['compose', 'groups', 'campaign', 'settings'];
 
-export const Layout: React.FC<LayoutProps> = ({ activeTab, onTabChange, children }) => {
+export const Layout: React.FC<LayoutProps> = ({
+  activeTab,
+  onTabChange,
+  badges = {},
+  statusDots = {},
+  children,
+}) => {
   return (
     <div className={styles.layout}>
       {/* Header */}
@@ -45,6 +53,8 @@ export const Layout: React.FC<LayoutProps> = ({ activeTab, onTabChange, children
         {TAB_ORDER.map((tabId) => {
           const Icon = TAB_ICONS[tabId];
           const isActive = activeTab === tabId;
+          const badge = badges[tabId];
+          const dot = statusDots[tabId];
           return (
             <button
               key={tabId}
@@ -55,8 +65,18 @@ export const Layout: React.FC<LayoutProps> = ({ activeTab, onTabChange, children
               className={`${styles.tab} ${isActive ? styles.tabActive : ''}`}
               onClick={() => onTabChange(tabId)}
             >
-              <Icon size={20} className={styles.tabIcon} />
+              <div className={styles.tabIconWrap}>
+                <Icon size={20} className={styles.tabIcon} />
+                {dot && (
+                  <span
+                    className={`${styles.statusDot} ${dot === 'running' ? styles.dotRunning : styles.dotPaused}`}
+                  />
+                )}
+              </div>
               <span className={styles.tabLabel}>{TAB_LABELS[tabId]}</span>
+              {badge !== undefined && (
+                <span className={styles.badge}>{badge}</span>
+              )}
               {isActive && <div className={styles.tabIndicator} />}
             </button>
           );
@@ -65,3 +85,4 @@ export const Layout: React.FC<LayoutProps> = ({ activeTab, onTabChange, children
     </div>
   );
 };
+

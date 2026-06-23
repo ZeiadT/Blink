@@ -124,3 +124,54 @@
     transform: translateX(-50%) scaleX(1);
   }
 }
+
+/* ── Tab Icon Wrapper ── */
+.tabIconWrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ── Badge Pill ── */
+.badge {
+  position: absolute;
+  top: 2px;
+  right: -2px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  font-size: 9px;
+  font-weight: var(--font-weight-bold);
+  line-height: 16px;
+  text-align: center;
+  color: #fff;
+  background: var(--color-accent);
+  border-radius: var(--radius-full);
+}
+
+/* ── Status Dot ── */
+.statusDot {
+  position: absolute;
+  top: -1px;
+  right: -3px;
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-full);
+  border: 2px solid var(--color-bg-secondary);
+}
+
+.dotRunning {
+  background: var(--color-success);
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+.dotPaused {
+  background: var(--color-warning);
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+

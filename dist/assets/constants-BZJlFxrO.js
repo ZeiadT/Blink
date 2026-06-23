@@ -1,2 +1,0 @@
-var e={POST_DRAFT:`blink_post_draft`,GROUP_LISTS:`blink_group_lists`,ACTIVE_GROUPS:`blink_active_groups`,CAMPAIGN_STATE:`blink_campaign_state`,SETTINGS:`blink_settings`},t={MAX_FILE_SIZE_BYTES:10*1024*1024,ACCEPTED_IMAGE_TYPES:[`image/jpeg`,`image/png`,`image/gif`,`image/webp`],ACCEPTED_VIDEO_TYPES:[`video/mp4`,`video/webm`],MAX_MEDIA_FILES:20},n=/^https?:\/\/(www\.|m\.|web\.)?facebook\.com\/groups\/[a-zA-Z0-9._-]+\/?(\?.*)?$/;export{t as n,e as r,n as t};
-//# sourceMappingURL=constants-BZJlFxrO.js.map

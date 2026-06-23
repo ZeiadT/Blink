@@ -142,6 +142,7 @@ describe('Type Shapes (compile-time validation)', () => {
       groupListId: '1',
       status: 'idle',
       currentIndex: 0,
+      totalGroups: 0,
       results: [],
       settings: DEFAULT_CAMPAIGN_SETTINGS,
     };

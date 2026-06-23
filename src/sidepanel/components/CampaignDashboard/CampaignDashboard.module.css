@@ -1,0 +1,132 @@
+.dashboard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  padding: var(--space-4);
+  animation: fadeInUp var(--transition-slow) ease forwards;
+}
+
+/* ── Hero ── */
+.hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: var(--space-2);
+  padding: var(--space-6) 0 var(--space-2);
+}
+
+.heroIconWrap {
+  width: 56px;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-xl);
+  background: var(--color-accent-muted);
+  color: var(--color-accent);
+  margin-bottom: var(--space-2);
+  box-shadow: var(--shadow-glow);
+}
+
+.heroTitle {
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-primary);
+}
+
+.heroSub {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-tertiary);
+}
+
+/* ── Summary Cards ── */
+.cards {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-glass);
+  border: var(--border-width) solid var(--color-glass-border);
+  border-radius: var(--radius-lg);
+  backdrop-filter: blur(8px);
+  transition: border-color var(--transition-fast);
+}
+
+.cardReady {
+  border-color: rgba(0, 196, 140, 0.2);
+}
+
+.cardWarn {
+  border-color: rgba(255, 71, 87, 0.15);
+}
+
+.cardLabel {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.cardValue {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  text-align: right;
+  max-width: 60%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cardReady .cardValue {
+  color: var(--color-success);
+}
+
+/* ── Warnings ── */
+.warning {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--font-size-xs);
+  color: var(--color-error);
+  background: var(--color-error-muted);
+  border-radius: var(--radius-md);
+}
+
+/* ── Controls ── */
+.controls {
+  display: flex;
+  gap: var(--space-3);
+}
+
+.controls > * {
+  flex: 1;
+}
+
+/* ── Buttons ── */
+.startBtn {
+  margin-top: var(--space-2);
+}
+
+.newBtn {
+  margin-top: var(--space-2);
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

@@ -57,6 +57,7 @@ export class CampaignOrchestrator {
       groupListId,
       status: 'running',
       currentIndex: 0,
+      totalGroups: groups.length,
       results: [],
       startedAt: Date.now(),
       settings,
@@ -167,6 +168,7 @@ export class CampaignOrchestrator {
       }
 
       this.campaign.currentIndex = i;
+      this.campaign.currentGroupUrl = groups[i].url;
       await this.persist();
       this.broadcast();
 

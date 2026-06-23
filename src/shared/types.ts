@@ -55,6 +55,8 @@ export interface Campaign {
   groupListId: string;
   status: CampaignStatus;
   currentIndex: number;
+  totalGroups: number;
+  currentGroupUrl?: string;
   results: PostResult[];
   startedAt?: number;
   completedAt?: number;
