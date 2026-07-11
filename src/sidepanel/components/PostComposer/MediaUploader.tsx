@@ -1,15 +1,25 @@
-import React, { useRef, useState, useCallback } from 'react';
-import { Upload, Image, Video, X } from 'lucide-react';
-import { usePostStore } from '../../store/postStore';
-import { isValidMediaFile, getMediaType, fileToDataUrl } from '@shared/validators';
+import React, { useCallback, useRef, useState } from 'react';
+import { Image, Upload, Video, X } from 'lucide-react';
+import { getMediaType, isValidMediaFile, fileToDataUrl } from '@shared/validators';
 import { MEDIA_CONSTRAINTS } from '@shared/constants';
-import { generateId, formatFileSize } from '@shared/utils';
+import { formatFileSize, generateId } from '@shared/utils';
 import { showToast } from '../shared/Toast';
 import type { MediaFile } from '@shared/types';
 import styles from './MediaUploader.module.css';
 
-export const MediaUploader: React.FC = () => {
-  const { draft, addMedia, removeMedia } = usePostStore();
+interface MediaUploaderProps {
+  mediaFiles: MediaFile[];
+  onAdd: (file: MediaFile) => void;
+  onRemove: (fileId: string) => void;
+  label?: string;
+}
+
+export const MediaUploader: React.FC<MediaUploaderProps> = ({
+  mediaFiles,
+  onAdd,
+  onRemove,
+  label = 'Upload media files',
+}) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragOver, setIsDragOver] = useState(false);
 
@@ -21,15 +31,16 @@ export const MediaUploader: React.FC = () => {
   const processFiles = useCallback(
     async (files: FileList | File[]) => {
       const fileArray = Array.from(files);
-      const remaining = MEDIA_CONSTRAINTS.MAX_MEDIA_FILES - draft.mediaFiles.length;
+      const remaining = MEDIA_CONSTRAINTS.MAX_MEDIA_FILES - mediaFiles.length;
 
       if (fileArray.length > remaining) {
-        showToast('warning', `Can only add ${remaining} more file(s). Max is ${MEDIA_CONSTRAINTS.MAX_MEDIA_FILES}.`);
+        showToast(
+          'warning',
+          `Can only add ${remaining} more file(s). Max is ${MEDIA_CONSTRAINTS.MAX_MEDIA_FILES}.`,
+        );
       }
 
-      const toProcess = fileArray.slice(0, remaining);
-
-      for (const file of toProcess) {
+      for (const file of fileArray.slice(0, remaining)) {
         const validation = isValidMediaFile(file);
         if (!validation.valid) {
           showToast('error', validation.error!);
@@ -41,55 +52,42 @@ export const MediaUploader: React.FC = () => {
 
         try {
           const dataUrl = await fileToDataUrl(file);
-          const media: MediaFile = {
+          onAdd({
             id: generateId(),
             name: file.name,
             type: mediaType,
             mimeType: file.type,
             dataUrl,
             sizeBytes: file.size,
-          };
-          addMedia(media);
+          });
         } catch {
           showToast('error', `Failed to read file: ${file.name}`);
         }
       }
     },
-    [draft.mediaFiles.length, addMedia],
+    [mediaFiles.length, onAdd],
   );
 
   const handleFileSelect = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      if (e.target.files && e.target.files.length > 0) {
-        processFiles(e.target.files);
-        e.target.value = ''; // Reset to allow re-selecting same file
+    (event: React.ChangeEvent<HTMLInputElement>) => {
+      if (event.target.files?.length) {
+        void processFiles(event.target.files);
+        event.target.value = '';
       }
     },
     [processFiles],
   );
 
   const handleDrop = useCallback(
-    (e: React.DragEvent) => {
-      e.preventDefault();
+    (event: React.DragEvent) => {
+      event.preventDefault();
       setIsDragOver(false);
-      if (e.dataTransfer.files.length > 0) {
-        processFiles(e.dataTransfer.files);
-      }
+      if (event.dataTransfer.files.length) void processFiles(event.dataTransfer.files);
     },
     [processFiles],
   );
 
-  const handleDragOver = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragOver(true);
-  }, []);
-
-  const handleDragLeave = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragOver(false);
-  }, []);
-
-  const atLimit = draft.mediaFiles.length >= MEDIA_CONSTRAINTS.MAX_MEDIA_FILES;
+  const atLimit = mediaFiles.length >= MEDIA_CONSTRAINTS.MAX_MEDIA_FILES;
 
   return (
     <section className={styles.section}>
@@ -99,24 +97,26 @@ export const MediaUploader: React.FC = () => {
           <span>Media</span>
         </div>
         <span className={styles.counter}>
-          {draft.mediaFiles.length} / {MEDIA_CONSTRAINTS.MAX_MEDIA_FILES}
+          {mediaFiles.length} / {MEDIA_CONSTRAINTS.MAX_MEDIA_FILES}
         </span>
       </div>
 
-      {/* Drop zone */}
       <div
         className={`${styles.dropZone} ${isDragOver ? styles.dropZoneActive : ''} ${atLimit ? styles.dropZoneDisabled : ''}`}
         onDrop={handleDrop}
-        onDragOver={handleDragOver}
-        onDragLeave={handleDragLeave}
+        onDragOver={(event) => {
+          event.preventDefault();
+          setIsDragOver(true);
+        }}
+        onDragLeave={() => setIsDragOver(false)}
         onClick={() => !atLimit && fileInputRef.current?.click()}
         role="button"
         tabIndex={0}
-        aria-label="Upload media files"
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            !atLimit && fileInputRef.current?.click();
+        aria-label={label}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            if (!atLimit) fileInputRef.current?.click();
           }
         }}
       >
@@ -125,7 +125,7 @@ export const MediaUploader: React.FC = () => {
           {atLimit ? 'Maximum files reached' : 'Drop files here or click to browse'}
         </span>
         <span className={styles.dropHint}>
-          Images (jpg, png, gif, webp) and videos (mp4, webm) · Max 10MB each
+          Images (jpg, png, gif, webp) and videos (mp4, webm) Â· Max 10MB each
         </span>
       </div>
 
@@ -140,17 +140,12 @@ export const MediaUploader: React.FC = () => {
         tabIndex={-1}
       />
 
-      {/* Thumbnail grid */}
-      {draft.mediaFiles.length > 0 && (
+      {mediaFiles.length > 0 && (
         <div className={styles.thumbnailGrid}>
-          {draft.mediaFiles.map((file) => (
+          {mediaFiles.map((file) => (
             <div key={file.id} className={styles.thumbnail}>
               {file.type === 'image' ? (
-                <img
-                  src={file.dataUrl}
-                  alt={file.name}
-                  className={styles.thumbnailImage}
-                />
+                <img src={file.dataUrl} alt={file.name} className={styles.thumbnailImage} />
               ) : (
                 <div className={styles.videoPlaceholder}>
                   <Video size={24} />
@@ -162,9 +157,9 @@ export const MediaUploader: React.FC = () => {
               </div>
               <button
                 className={styles.removeButton}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  removeMedia(file.id);
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onRemove(file.id);
                 }}
                 aria-label={`Remove ${file.name}`}
               >

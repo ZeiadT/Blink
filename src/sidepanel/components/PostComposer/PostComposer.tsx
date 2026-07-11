@@ -1,53 +1,44 @@
-import React, { useEffect, useRef, useCallback } from 'react';
-import { Trash2, Save, Type } from 'lucide-react';
+import React, { useCallback, useEffect, useRef } from 'react';
+import { Trash2, Type } from 'lucide-react';
 import { usePostStore } from '../../store/postStore';
 import { MediaUploader } from './MediaUploader';
 import { PostPreview } from './PostPreview';
+import { SavedPostLibrary } from './SavedPostLibrary';
 import { Button } from '../shared/Button';
 import { showToast } from '../shared/Toast';
 import styles from './PostComposer.module.css';
 
 export const PostComposer: React.FC = () => {
-  const { draft, isDirty, isLoaded, setText, clearDraft, loadDraft, saveDraft } = usePostStore();
+  const draft = usePostStore((state) => state.draft);
+  const isLoaded = usePostStore((state) => state.isLoaded);
+  const error = usePostStore((state) => state.error);
+  const setText = usePostStore((state) => state.setText);
+  const addMedia = usePostStore((state) => state.addMedia);
+  const removeMedia = usePostStore((state) => state.removeMedia);
+  const clearDraft = usePostStore((state) => state.clearDraft);
+  const loadDraft = usePostStore((state) => state.loadDraft);
+  const clearError = usePostStore((state) => state.clearError);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Load draft from storage on mount
   useEffect(() => {
-    loadDraft();
-  }, [loadDraft]);
+    if (!isLoaded) void loadDraft();
+  }, [isLoaded, loadDraft]);
 
-  // Auto-resize textarea
   const adjustHeight = useCallback(() => {
-    const el = textareaRef.current;
-    if (el) {
-      el.style.height = 'auto';
-      el.style.height = `${Math.max(el.scrollHeight, 120)}px`;
-    }
+    const element = textareaRef.current;
+    if (!element) return;
+    element.style.height = 'auto';
+    element.style.height = `${Math.max(element.scrollHeight, 120)}px`;
   }, []);
 
   useEffect(() => {
     adjustHeight();
-  }, [draft.text, adjustHeight]);
-
-  const handleTextChange = useCallback(
-    (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-      setText(e.target.value);
-    },
-    [setText],
-  );
+  }, [adjustHeight, draft.text]);
 
   const handleClear = useCallback(() => {
     clearDraft();
-    showToast('info', 'Draft cleared.');
+    showToast('info', 'Campaign draft cleared. Saved posts were kept.');
   }, [clearDraft]);
-
-  const handleSave = useCallback(() => {
-    saveDraft();
-    showToast('success', 'Draft saved.');
-  }, [saveDraft]);
-
-  const charCount = draft.text.length;
-  const hasContent = draft.text.trim().length > 0 || draft.mediaFiles.length > 0;
 
   if (!isLoaded) {
     return (
@@ -60,58 +51,53 @@ export const PostComposer: React.FC = () => {
     );
   }
 
+  const hasContent = draft.text.trim().length > 0 || draft.mediaFiles.length > 0;
+
   return (
     <div className={styles.wrapper}>
-      {/* ── Text Input Section ── */}
+      <SavedPostLibrary />
+
+      {error && (
+        <div className={styles.error} role="alert">
+          <span>{error}</span>
+          <button onClick={clearError} aria-label="Dismiss post storage error">Dismiss</button>
+        </div>
+      )}
+
       <section className={styles.section}>
         <div className={styles.sectionHeader}>
           <div className={styles.sectionLabel}>
             <Type size={14} />
-            <span>Post content</span>
+            <span>Campaign content</span>
           </div>
-          <span className={styles.charCount}>{charCount.toLocaleString()}</span>
+          <span className={styles.charCount}>{draft.text.length.toLocaleString()}</span>
         </div>
         <textarea
           ref={textareaRef}
           id="post-text-input"
           className={styles.textarea}
           value={draft.text}
-          onChange={handleTextChange}
+          onChange={(event) => setText(event.target.value)}
           placeholder="What do you want to share with your groups?"
           rows={5}
           aria-label="Post text content"
         />
       </section>
 
-      {/* ── Media Upload Section ── */}
-      <MediaUploader />
+      <MediaUploader
+        mediaFiles={draft.mediaFiles}
+        onAdd={addMedia}
+        onRemove={removeMedia}
+      />
 
-      {/* ── Actions ── */}
       <div className={styles.actions}>
-        <Button
-          variant="ghost"
-          size="sm"
-          icon={Trash2}
-          onClick={handleClear}
-          disabled={!hasContent}
-        >
-          Clear
-        </Button>
-        <Button
-          variant="secondary"
-          size="sm"
-          icon={Save}
-          onClick={handleSave}
-          disabled={!isDirty}
-        >
-          Save draft
+        <Button variant="ghost" size="sm" icon={Trash2} onClick={handleClear} disabled={!hasContent}>
+          Clear campaign draft
         </Button>
       </div>
 
-      {/* ── Preview ── */}
       {hasContent && <PostPreview draft={draft} />}
 
-      {/* ── Disclaimer ── */}
       <p className={styles.disclaimer}>
         Automated posting may violate platform terms of service. Use responsibly.
       </p>

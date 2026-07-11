@@ -38,14 +38,7 @@ export const PostPreview: React.FC<PostPreviewProps> = ({ draft }) => {
 
         {/* Post text */}
         {hasText && (
-          <div className={styles.textContent}>
-            {draft.text.split('\n').map((line, i) => (
-              <React.Fragment key={i}>
-                {i > 0 && <br />}
-                {line}
-              </React.Fragment>
-            ))}
-          </div>
+          <div className={styles.textContent}>{draft.text}</div>
         )}
 
         {/* Image grid */}
