@@ -52,17 +52,32 @@
 }
 
 .itemUrl {
-  font-size: var(--font-size-sm);
-  color: var(--color-text-primary);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-tertiary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   font-family: monospace;
 }
 
-.itemLabel {
-  font-size: var(--font-size-xs);
-  color: var(--color-text-tertiary);
+.itemName {
+  overflow: hidden;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nameInput {
+  width: 100%;
+  min-width: 0;
+  padding: 2px 5px;
+  border: var(--border-width) solid var(--color-accent);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-primary);
+  color: var(--color-text-primary);
+  font: inherit;
 }
 
 .itemActions {
@@ -103,8 +118,36 @@
   opacity: 0;
 }
 
-.item:hover .removeButton {
+.editButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  opacity: 0;
+}
+
+.item:hover .removeButton,
+.item:hover .editButton {
   opacity: 1;
+}
+
+.editButton:hover {
+  color: var(--color-accent);
+  background: var(--color-accent-muted);
+}
+
+.editButton:focus-visible,
+.removeButton:focus-visible {
+  opacity: 1;
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
 }
 
 .removeButton:hover {

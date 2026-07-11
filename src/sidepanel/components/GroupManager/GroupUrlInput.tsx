@@ -1,11 +1,13 @@
 import React, { useState, useCallback } from 'react';
 import { Plus, Link, CheckCircle, XCircle } from 'lucide-react';
-import { isValidFacebookGroupUrl } from '@shared/validators';
+import { normalizeGroupIdentity } from '@shared/groupCatalog';
 import { Button } from '../shared/Button';
 import styles from './GroupUrlInput.module.css';
 
 interface GroupUrlInputProps {
-  onAdd: (urls: string[]) => { added: number; invalid: string[]; duplicates: string[] };
+  onAdd: (
+    urls: string[],
+  ) => Promise<{ ok: boolean; added: number; invalid: string[]; duplicates: string[] }>;
 }
 
 interface ParsedUrl {
@@ -23,22 +25,24 @@ export const GroupUrlInput: React.FC<GroupUrlInputProps> = ({ onAdd }) => {
       .split(/[\n,]+/)
       .map((l) => l.trim())
       .filter(Boolean);
-    setParsed(lines.map((raw) => ({ raw, valid: isValidFacebookGroupUrl(raw) })));
+    setParsed(lines.map((raw) => ({ raw, valid: normalizeGroupIdentity(raw).ok })));
   }, []);
 
-  const handleAdd = useCallback(() => {
+  const handleAdd = useCallback(async () => {
     const validUrls = parsed.filter((p) => p.valid).map((p) => p.raw);
     if (validUrls.length === 0) return;
-    onAdd(validUrls);
-    setText('');
-    setParsed([]);
+    const result = await onAdd(validUrls);
+    if (result.ok) {
+      setText('');
+      setParsed([]);
+    }
   }, [parsed, onAdd]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
       if (e.key === 'Enter' && e.ctrlKey) {
         e.preventDefault();
-        handleAdd();
+        void handleAdd();
       }
     },
     [handleAdd],
@@ -52,7 +56,7 @@ export const GroupUrlInput: React.FC<GroupUrlInputProps> = ({ onAdd }) => {
       <div className={styles.sectionHeader}>
         <div className={styles.sectionLabel}>
           <Link size={14} />
-          <span>Add group URLs</span>
+          <span>Add group URLs or IDs</span>
         </div>
       </div>
 
@@ -61,7 +65,9 @@ export const GroupUrlInput: React.FC<GroupUrlInputProps> = ({ onAdd }) => {
         value={text}
         onChange={(e) => parseInput(e.target.value)}
         onKeyDown={handleKeyDown}
-        placeholder={"Paste Facebook group URLs, one per line:\nhttps://facebook.com/groups/example1\nhttps://facebook.com/groups/example2"}
+        placeholder={
+          'Paste Facebook group URLs or IDs, one per line:\nhttps://facebook.com/groups/example1\nexample-group-id'
+        }
         rows={4}
         aria-label="Group URLs input"
         id="group-url-input"
@@ -87,7 +93,10 @@ export const GroupUrlInput: React.FC<GroupUrlInputProps> = ({ onAdd }) => {
       {parsed.length > 0 && (
         <div className={styles.urlList}>
           {parsed.map((p, i) => (
-            <div key={i} className={`${styles.urlItem} ${p.valid ? styles.urlValid : styles.urlInvalid}`}>
+            <div
+              key={i}
+              className={`${styles.urlItem} ${p.valid ? styles.urlValid : styles.urlInvalid}`}
+            >
               {p.valid ? <CheckCircle size={12} /> : <XCircle size={12} />}
               <span className={styles.urlText}>{p.raw}</span>
             </div>
@@ -99,7 +108,7 @@ export const GroupUrlInput: React.FC<GroupUrlInputProps> = ({ onAdd }) => {
         variant="primary"
         size="sm"
         icon={Plus}
-        onClick={handleAdd}
+        onClick={() => void handleAdd()}
         disabled={validCount === 0}
         fullWidth
       >

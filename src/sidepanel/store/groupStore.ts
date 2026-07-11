@@ -1,160 +1,258 @@
 import { create } from 'zustand';
-import type { GroupEntry, GroupList } from '@shared/types';
-import { STORAGE_KEYS } from '@shared/constants';
+import { loadGroupCatalog, saveGroupCatalogSnapshot } from '@background/storage';
+import {
+  cloneCatalogGroups,
+  normalizeDisplayName,
+  normalizeGroupIdentity,
+} from '@shared/groupCatalog';
+import { previewGroupImport, type GroupImportPreview } from '@shared/groupImport';
+import type { CatalogGroupEntry, GroupList } from '@shared/types';
 import { generateId } from '@shared/utils';
-import { isValidFacebookGroupUrl, deduplicateUrls } from '@shared/validators';
 
-interface GroupState {
-  // ── State ──
-  activeGroups: GroupEntry[];
-  savedLists: GroupList[];
-  isLoaded: boolean;
-
-  // ── Active Group Actions ──
-  addUrls: (urls: string[]) => { added: number; invalid: string[]; duplicates: string[] };
-  removeUrl: (url: string) => void;
-  clearAll: () => void;
-  setLabel: (url: string, label: string) => void;
-
-  // ── Saved List Actions ──
-  saveList: (name: string) => void;
-  loadList: (listId: string) => void;
-  deleteList: (listId: string) => void;
-  renameList: (listId: string, newName: string) => void;
-
-  // ── Persistence ──
-  loadFromStorage: () => Promise<void>;
-  persistActiveGroups: () => Promise<void>;
-  persistSavedLists: () => Promise<void>;
+export interface CatalogActionResult {
+  ok: boolean;
+  error?: string;
 }
 
-export const useGroupStore = create<GroupState>((set, get) => ({
-  activeGroups: [],
-  savedLists: [],
-  isLoaded: false,
+export interface AddEntriesResult extends CatalogActionResult {
+  added: number;
+  invalid: string[];
+  duplicates: string[];
+}
 
-  addUrls: (urls: string[]) => {
-    const { activeGroups } = get();
-    const existingUrls = activeGroups.map((g) => g.url);
+export interface ImportPreviewState extends GroupImportPreview {
+  catalogRevision: number;
+}
 
-    // Filter valid URLs
-    const valid: string[] = [];
-    const invalid: string[] = [];
-    for (const url of urls) {
-      const trimmed = url.trim();
-      if (!trimmed) continue;
-      if (isValidFacebookGroupUrl(trimmed)) {
-        valid.push(trimmed);
-      } else {
-        invalid.push(trimmed);
+interface GroupState {
+  activeGroups: CatalogGroupEntry[];
+  savedLists: GroupList[];
+  isLoaded: boolean;
+  isPersisting: boolean;
+  isPreviewingImport: boolean;
+  catalogError: string | null;
+  importPreview: ImportPreviewState | null;
+  catalogRevision: number;
+
+  hydrateCatalog: () => Promise<CatalogActionResult>;
+  addEntries: (inputs: string[]) => Promise<AddEntriesResult>;
+  renameGroup: (groupId: string, name: string) => Promise<CatalogActionResult>;
+  removeGroup: (groupId: string) => Promise<CatalogActionResult>;
+  clearAll: () => Promise<CatalogActionResult>;
+  saveList: (name: string) => Promise<CatalogActionResult>;
+  loadList: (listId: string) => Promise<CatalogActionResult>;
+  deleteList: (listId: string) => Promise<CatalogActionResult>;
+  renameList: (listId: string, name: string) => Promise<CatalogActionResult>;
+  previewImport: (file: File) => Promise<CatalogActionResult>;
+  confirmImport: (previewId: string) => Promise<CatalogActionResult & { added?: number }>;
+  cancelImport: () => void;
+}
+
+export const useGroupStore = create<GroupState>((set, get) => {
+  const commitCatalog = async (
+    activeGroups: CatalogGroupEntry[],
+    savedLists: GroupList[],
+  ): Promise<CatalogActionResult> => {
+    set({ isPersisting: true, catalogError: null });
+    const result = await saveGroupCatalogSnapshot({ activeGroups, savedLists });
+    if (!result.ok) {
+      set({ isPersisting: false, catalogError: result.error });
+      return { ok: false, error: result.error };
+    }
+
+    set((state) => ({
+      activeGroups: result.value.activeGroups,
+      savedLists: result.value.savedLists,
+      isPersisting: false,
+      catalogRevision: state.catalogRevision + 1,
+    }));
+    return { ok: true };
+  };
+
+  return {
+    activeGroups: [],
+    savedLists: [],
+    isLoaded: false,
+    isPersisting: false,
+    isPreviewingImport: false,
+    catalogError: null,
+    importPreview: null,
+    catalogRevision: 0,
+
+    hydrateCatalog: async () => {
+      const result = await loadGroupCatalog();
+      if (!result.ok) {
+        set({ isLoaded: true, catalogError: result.error });
+        return { ok: false, error: result.error };
       }
-    }
 
-    // Deduplicate against existing + within batch
-    const { unique, duplicates } = deduplicateUrls([...existingUrls, ...valid]);
-    const newUrls = unique.slice(existingUrls.length); // Only the genuinely new ones
+      set((state) => ({
+        activeGroups: result.value.activeGroups,
+        savedLists: result.value.savedLists,
+        isLoaded: true,
+        catalogError: null,
+        catalogRevision: state.catalogRevision + 1,
+      }));
+      return { ok: true };
+    },
 
-    const newEntries: GroupEntry[] = newUrls.map((url) => ({ url }));
+    addEntries: async (inputs) => {
+      const activeGroups = get().activeGroups;
+      const knownGroups = new Map(activeGroups.map((group) => [group.groupId, group]));
+      const seenInputs = new Set<string>();
+      const entries: CatalogGroupEntry[] = [];
+      const invalid: string[] = [];
+      const duplicates: string[] = [];
 
-    set((state) => ({
-      activeGroups: [...state.activeGroups, ...newEntries],
-    }));
+      for (const input of inputs) {
+        const trimmed = input.trim();
+        if (!trimmed) continue;
+        const normalized = normalizeGroupIdentity(trimmed);
+        if (!normalized.ok) {
+          invalid.push(trimmed);
+          continue;
+        }
+        const duplicate = knownGroups.get(normalized.value.groupId);
+        if (duplicate) {
+          duplicates.push(`${trimmed} (already “${duplicate.name}”)`);
+          continue;
+        }
+        if (seenInputs.has(normalized.value.groupId)) {
+          duplicates.push(`${trimmed} (repeated in this entry)`);
+          continue;
+        }
 
-    get().persistActiveGroups();
-    return { added: newEntries.length, invalid, duplicates };
-  },
+        seenInputs.add(normalized.value.groupId);
+        entries.push({
+          ...normalized.value,
+          name: normalized.value.groupId,
+        });
+      }
 
-  removeUrl: (url: string) => {
-    set((state) => ({
-      activeGroups: state.activeGroups.filter((g) => g.url !== url),
-    }));
-    get().persistActiveGroups();
-  },
+      if (entries.length === 0) {
+        return { ok: true, added: 0, invalid, duplicates };
+      }
 
-  clearAll: () => {
-    set({ activeGroups: [] });
-    get().persistActiveGroups();
-  },
+      const savedLists = get().savedLists;
+      const persisted = await commitCatalog([...activeGroups, ...entries], savedLists);
+      return { ...persisted, added: persisted.ok ? entries.length : 0, invalid, duplicates };
+    },
 
-  setLabel: (url: string, label: string) => {
-    set((state) => ({
-      activeGroups: state.activeGroups.map((g) =>
-        g.url === url ? { ...g, label } : g
-      ),
-    }));
-    get().persistActiveGroups();
-  },
+    renameGroup: async (groupId, name) => {
+      const activeGroups = get().activeGroups;
+      const group = activeGroups.find((entry) => entry.groupId === groupId);
+      if (!group) return { ok: false, error: 'Group no longer exists.' };
+      const nextName = normalizeDisplayName(name, groupId);
+      if (nextName === group.name) return { ok: true };
+      return commitCatalog(
+        activeGroups.map((entry) =>
+          entry.groupId === groupId ? { ...entry, name: nextName } : entry,
+        ),
+        get().savedLists,
+      );
+    },
 
-  saveList: (name: string) => {
-    const { activeGroups, savedLists } = get();
-    const now = Date.now();
-    const newList: GroupList = {
-      id: generateId(),
-      name,
-      groups: [...activeGroups],
-      createdAt: now,
-      updatedAt: now,
-    };
-    set({ savedLists: [...savedLists, newList] });
-    get().persistSavedLists();
-  },
+    removeGroup: async (groupId) => {
+      const activeGroups = get().activeGroups;
+      if (!activeGroups.some((group) => group.groupId === groupId)) {
+        return { ok: false, error: 'Group no longer exists.' };
+      }
+      return commitCatalog(
+        activeGroups.filter((group) => group.groupId !== groupId),
+        get().savedLists,
+      );
+    },
 
-  loadList: (listId: string) => {
-    const list = get().savedLists.find((l) => l.id === listId);
-    if (list) {
-      set({ activeGroups: [...list.groups] });
-      get().persistActiveGroups();
-    }
-  },
+    clearAll: async () => commitCatalog([], get().savedLists),
 
-  deleteList: (listId: string) => {
-    set((state) => ({
-      savedLists: state.savedLists.filter((l) => l.id !== listId),
-    }));
-    get().persistSavedLists();
-  },
+    saveList: async (name) => {
+      const trimmed = name.trim();
+      if (!trimmed) return { ok: false, error: 'Enter a name for this saved list.' };
+      const activeGroups = get().activeGroups;
+      const now = Date.now();
+      const list: GroupList = {
+        id: generateId(),
+        name: trimmed,
+        groups: cloneCatalogGroups(activeGroups),
+        createdAt: now,
+        updatedAt: now,
+      };
+      return commitCatalog(activeGroups, [...get().savedLists, list]);
+    },
 
-  renameList: (listId: string, newName: string) => {
-    set((state) => ({
-      savedLists: state.savedLists.map((l) =>
-        l.id === listId ? { ...l, name: newName, updatedAt: Date.now() } : l
-      ),
-    }));
-    get().persistSavedLists();
-  },
+    loadList: async (listId) => {
+      const list = get().savedLists.find((candidate) => candidate.id === listId);
+      if (!list) return { ok: false, error: 'Saved list no longer exists.' };
+      return commitCatalog(
+        cloneCatalogGroups(list.groups as CatalogGroupEntry[]),
+        get().savedLists,
+      );
+    },
 
-  loadFromStorage: async () => {
-    try {
-      const result = await chrome.storage.local.get([
-        STORAGE_KEYS.ACTIVE_GROUPS,
-        STORAGE_KEYS.GROUP_LISTS,
-      ]);
-      const groups = (result[STORAGE_KEYS.ACTIVE_GROUPS] as GroupEntry[]) || [];
-      const lists = (result[STORAGE_KEYS.GROUP_LISTS] as GroupList[]) || [];
-      set({ activeGroups: groups, savedLists: lists, isLoaded: true });
-    } catch (err) {
-      console.error('[Blink] Failed to load groups:', err);
-      set({ isLoaded: true });
-    }
-  },
+    deleteList: async (listId) => {
+      const savedLists = get().savedLists;
+      if (!savedLists.some((list) => list.id === listId)) {
+        return { ok: false, error: 'Saved list no longer exists.' };
+      }
+      return commitCatalog(
+        get().activeGroups,
+        savedLists.filter((list) => list.id !== listId),
+      );
+    },
 
-  persistActiveGroups: async () => {
-    try {
-      await chrome.storage.local.set({
-        [STORAGE_KEYS.ACTIVE_GROUPS]: get().activeGroups,
+    renameList: async (listId, name) => {
+      const trimmed = name.trim();
+      if (!trimmed) return { ok: false, error: 'List name cannot be blank.' };
+      const savedLists = get().savedLists;
+      if (!savedLists.some((list) => list.id === listId)) {
+        return { ok: false, error: 'Saved list no longer exists.' };
+      }
+      return commitCatalog(
+        get().activeGroups,
+        savedLists.map((list) =>
+          list.id === listId ? { ...list, name: trimmed, updatedAt: Date.now() } : list,
+        ),
+      );
+    },
+
+    previewImport: async (file) => {
+      set({ isPreviewingImport: true, catalogError: null });
+      const result = await previewGroupImport(file, get().activeGroups);
+      if (!result.ok) {
+        set({ isPreviewingImport: false, catalogError: result.error.message });
+        return { ok: false, error: result.error.message };
+      }
+      set({
+        isPreviewingImport: false,
+        importPreview: { ...result.preview, catalogRevision: get().catalogRevision },
       });
-    } catch (err) {
-      console.error('[Blink] Failed to persist active groups:', err);
-    }
-  },
+      return { ok: true };
+    },
 
-  persistSavedLists: async () => {
-    try {
-      await chrome.storage.local.set({
-        [STORAGE_KEYS.GROUP_LISTS]: get().savedLists,
-      });
-    } catch (err) {
-      console.error('[Blink] Failed to persist saved lists:', err);
-    }
-  },
-}));
+    confirmImport: async (previewId) => {
+      const preview = get().importPreview;
+      if (!preview || preview.id !== previewId) {
+        const error = 'This import preview is no longer available.';
+        set({ catalogError: error });
+        return { ok: false, error };
+      }
+      if (preview.catalogRevision !== get().catalogRevision) {
+        const error = 'Groups changed since this preview. Review the file again before importing.';
+        set({ catalogError: error });
+        return { ok: false, error };
+      }
+
+      const entries = preview.rows.flatMap((row) =>
+        row.status === 'valid' && row.candidate ? [row.candidate] : [],
+      );
+      if (entries.length === 0) {
+        return { ok: false, error: 'No valid groups are available to import.' };
+      }
+      const persisted = await commitCatalog([...get().activeGroups, ...entries], get().savedLists);
+      if (persisted.ok) set({ importPreview: null });
+      return { ...persisted, ...(persisted.ok ? { added: entries.length } : {}) };
+    },
+
+    cancelImport: () => set({ importPreview: null, catalogError: null }),
+  };
+});
