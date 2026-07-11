@@ -8,13 +8,17 @@ export function useCampaign() {
   const pauseCampaign = useCampaignStore((s) => s.pauseCampaign);
   const resumeCampaign = useCampaignStore((s) => s.resumeCampaign);
   const cancelCampaign = useCampaignStore((s) => s.cancelCampaign);
-  const clearCampaign = useCampaignStore((s) => s.clearCampaign);
+  const dismissCampaign = useCampaignStore((s) => s.dismissCampaign);
 
   const status: CampaignStatus = campaign?.status ?? 'idle';
   const isIdle = !campaign || status === 'idle';
   const isRunning = status === 'running';
   const isPaused = status === 'paused';
-  const isFinished = status === 'completed' || status === 'failed' || status === 'cancelled';
+  const isFinished =
+    status === 'completed' ||
+    status === 'completed-with-issues' ||
+    status === 'failed' ||
+    status === 'cancelled';
   const progress =
     campaign && campaign.totalGroups > 0
       ? campaign.results.length / campaign.totalGroups
@@ -39,6 +43,6 @@ export function useCampaign() {
     pauseCampaign,
     resumeCampaign,
     cancelCampaign,
-    clearCampaign,
+    dismissCampaign,
   };
 }

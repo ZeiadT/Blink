@@ -1,119 +1,164 @@
 import { create } from 'zustand';
-import type { Campaign, CampaignSettings, PostDraft, GroupEntry, GroupList } from '@shared/types';
-import { STORAGE_KEYS } from '@shared/constants';
+import type {
+  Campaign,
+  CampaignSettings,
+  GroupEntry,
+  PopupMessage,
+  PostDraft,
+  CampaignHistoryEntry,
+} from '@shared/types';
 import {
-  createStartCampaignMessage,
+  createCancelCampaignMessage,
+  createDismissCampaignMessage,
+  createGetCampaignHistoryMessage,
+  createGetCampaignStatusMessage,
   createPauseCampaignMessage,
   createResumeCampaignMessage,
-  createCancelCampaignMessage,
-  createGetCampaignStatusMessage,
+  createStartCampaignMessage,
+  isCampaignHistoryResponse,
+  isCampaignStatusResponse,
+  isStatusUpdate,
 } from '@shared/messages';
-import { generateId } from '@shared/utils';
+
+type CampaignAction = 'start' | 'pause' | 'resume' | 'cancel' | 'dismiss' | 'history' | null;
+
+type CampaignCommandMessage = Exclude<PopupMessage, { type: 'GET_CAMPAIGN_STATUS' | 'GET_CAMPAIGN_HISTORY' }>;
 
 interface CampaignState {
   campaign: Campaign | null;
+  history: CampaignHistoryEntry[];
   isLoading: boolean;
+  pendingAction: CampaignAction;
+  actionError: string | null;
+  historyError: string | null;
   startCampaign: (postDraft: PostDraft, groups: GroupEntry[], settings: CampaignSettings) => Promise<void>;
   pauseCampaign: () => Promise<void>;
   resumeCampaign: () => Promise<void>;
   cancelCampaign: () => Promise<void>;
+  dismissCampaign: () => Promise<void>;
   refreshStatus: () => Promise<void>;
+  refreshHistory: () => Promise<void>;
   setCampaign: (campaign: Campaign | null) => void;
-  clearCampaign: () => void;
+  clearActionError: () => void;
 }
 
 export const useCampaignStore = create<CampaignState>((set) => ({
   campaign: null,
+  history: [],
   isLoading: false,
+  pendingAction: null,
+  actionError: null,
+  historyError: null,
 
   startCampaign: async (postDraft, groups, settings) => {
-    set({ isLoading: true });
-    try {
-      const groupListId = await saveGroupsForCampaign(groups);
-      await chrome.runtime.sendMessage(
-        createStartCampaignMessage(postDraft, groupListId, settings),
-      );
-    } catch (error) {
-      console.error('[Blink] Failed to start campaign:', error);
-      throw error;
-    } finally {
-      set({ isLoading: false });
-    }
+    await sendCampaignCommand(
+      'start',
+      createStartCampaignMessage(postDraft, groups, settings),
+      set,
+    );
   },
 
   pauseCampaign: async () => {
-    try {
-      await chrome.runtime.sendMessage(createPauseCampaignMessage());
-    } catch (error) {
-      console.error('[Blink] Failed to pause:', error);
-    }
+    await sendCampaignCommand('pause', createPauseCampaignMessage(), set);
   },
 
   resumeCampaign: async () => {
-    try {
-      await chrome.runtime.sendMessage(createResumeCampaignMessage());
-    } catch (error) {
-      console.error('[Blink] Failed to resume:', error);
-    }
+    await sendCampaignCommand('resume', createResumeCampaignMessage(), set);
   },
 
   cancelCampaign: async () => {
-    try {
-      await chrome.runtime.sendMessage(createCancelCampaignMessage());
-    } catch (error) {
-      console.error('[Blink] Failed to cancel:', error);
-    }
+    await sendCampaignCommand('cancel', createCancelCampaignMessage(), set);
+  },
+
+  dismissCampaign: async () => {
+    await sendCampaignCommand('dismiss', createDismissCampaignMessage(), set);
+    await useCampaignStore.getState().refreshHistory();
   },
 
   refreshStatus: async () => {
     try {
       const response = await chrome.runtime.sendMessage(createGetCampaignStatusMessage());
-      if (response?.success && response.campaign) {
-        set({ campaign: response.campaign });
+      const campaign = readCampaignResponse(response);
+      set({ campaign, actionError: null });
+    } catch (error) {
+      set({ actionError: formatError(error) });
+    }
+  },
+
+  refreshHistory: async () => {
+    set({ pendingAction: 'history', historyError: null });
+    try {
+      const response = await chrome.runtime.sendMessage(createGetCampaignHistoryMessage());
+      if (!isCampaignHistoryResponse(response)) {
+        throw new Error('Background returned an invalid campaign-history response.');
       }
-    } catch {
-      // Background might not be ready — load from storage
-      try {
-        const result = await chrome.storage.local.get(STORAGE_KEYS.CAMPAIGN_STATE);
-        const campaign = result[STORAGE_KEYS.CAMPAIGN_STATE] as Campaign | undefined;
-        if (campaign) set({ campaign });
-      } catch (e) {
-        console.error('[Blink] Failed to load campaign state:', e);
+      if (!response.ok) {
+        throw new Error(response.error ?? 'Campaign history is unavailable.');
       }
+      set({ history: response.history, historyError: null, pendingAction: null });
+    } catch (error) {
+      set({ historyError: formatError(error), pendingAction: null });
     }
   },
 
   setCampaign: (campaign) => set({ campaign }),
-
-  clearCampaign: () => set({ campaign: null }),
+  clearActionError: () => set({ actionError: null }),
 }));
 
-/** Save active groups as a GroupList so the orchestrator can find them by ID. */
-async function saveGroupsForCampaign(groups: GroupEntry[]): Promise<string> {
-  const listId = generateId();
-  const list: GroupList = {
-    id: listId,
-    name: `Campaign ${new Date().toLocaleDateString()}`,
-    groups: [...groups],
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
-  };
-
-  const result = await chrome.storage.local.get(STORAGE_KEYS.GROUP_LISTS);
-  const lists = (result[STORAGE_KEYS.GROUP_LISTS] as GroupList[]) ?? [];
-  lists.push(list);
-  await chrome.storage.local.set({ [STORAGE_KEYS.GROUP_LISTS]: lists });
-  return listId;
+async function sendCampaignCommand(
+  action: Exclude<CampaignAction, 'history' | null>,
+  message: CampaignCommandMessage,
+  set: (partial: Partial<CampaignState>) => void,
+): Promise<void> {
+  set({ isLoading: true, pendingAction: action, actionError: null });
+  try {
+    const response = await chrome.runtime.sendMessage(message);
+    const campaign = readCampaignResponse(response);
+    set({ campaign, isLoading: false, pendingAction: null, actionError: null });
+  } catch (error) {
+    const messageText = formatError(error);
+    set({ isLoading: false, pendingAction: null, actionError: messageText });
+    throw error instanceof Error ? error : new Error(messageText);
+  }
 }
 
-// Auto-init: load status + listen for real-time updates
-if (typeof chrome !== 'undefined' && chrome.storage) {
-  useCampaignStore.getState().refreshStatus();
+function readCampaignResponse(response: unknown): Campaign | null {
+  if (!isCampaignStatusResponse(response)) {
+    throw new Error('Background returned an invalid campaign response.');
+  }
+  if (!response.ok) {
+    throw new Error(response.error ?? 'Campaign action could not be completed.');
+  }
+  return response.campaign;
+}
 
-  chrome.storage.onChanged.addListener((changes, areaName) => {
-    if (areaName === 'local' && changes[STORAGE_KEYS.CAMPAIGN_STATE]) {
-      const campaign = changes[STORAGE_KEYS.CAMPAIGN_STATE].newValue as Campaign | undefined;
-      useCampaignStore.getState().setCampaign(campaign ?? null);
+function formatError(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function isTerminalCampaign(campaign: Campaign | null): boolean {
+  return (
+    campaign?.status === 'completed' ||
+    campaign?.status === 'completed-with-issues' ||
+    campaign?.status === 'failed' ||
+    campaign?.status === 'cancelled'
+  );
+}
+
+// Side panel reads only background contracts; it never reads campaign storage.
+if (typeof chrome !== 'undefined' && chrome.runtime) {
+  void initializeCampaignState();
+
+  chrome.runtime.onMessage.addListener((message) => {
+    if (!isStatusUpdate(message)) return;
+    useCampaignStore.getState().setCampaign(message.payload);
+    if (isTerminalCampaign(message.payload)) {
+      void useCampaignStore.getState().refreshHistory();
     }
   });
+}
+
+async function initializeCampaignState(): Promise<void> {
+  await useCampaignStore.getState().refreshStatus();
+  await useCampaignStore.getState().refreshHistory();
 }

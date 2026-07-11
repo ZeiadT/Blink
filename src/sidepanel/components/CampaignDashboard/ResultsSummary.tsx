@@ -32,10 +32,12 @@ const ResultRow: React.FC<{
 
   return (
     <div className={styles.row}>
-      <div
-        className={styles.rowMain}
+      <button
+        type="button"
+        className={`${styles.rowMain} ${result.error ? styles.rowButton : ''}`}
         onClick={result.error ? onToggle : undefined}
-        style={result.error ? { cursor: 'pointer' } : undefined}
+        disabled={!result.error}
+        aria-expanded={result.error ? isExpanded : undefined}
       >
         <span className={statusClass}>{icon}</span>
         <span className={styles.rowUrl}>{truncate(result.groupUrl, 38)}</span>
@@ -45,7 +47,7 @@ const ResultRow: React.FC<{
             {isExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
           </span>
         )}
-      </div>
+      </button>
       {isExpanded && result.error && (
         <div className={styles.errorDetail}>{result.error}</div>
       )}
@@ -63,11 +65,13 @@ export const ResultsSummary: React.FC<ResultsSummaryProps> = ({ campaign }) => {
 
   const bannerLabel =
     status === 'completed' ? 'Campaign Complete' :
+    status === 'completed-with-issues' ? 'Completed with Issues' :
     status === 'failed' ? 'Campaign Failed' :
     'Campaign Cancelled';
 
   const bannerClass =
     status === 'completed' ? styles.bannerSuccess :
+    status === 'completed-with-issues' ? styles.bannerIssues :
     status === 'failed' ? styles.bannerFailed :
     styles.bannerCancelled;
 
@@ -81,6 +85,17 @@ export const ResultsSummary: React.FC<ResultsSummaryProps> = ({ campaign }) => {
       <div className={`${styles.banner} ${bannerClass}`}>
         <h2 className={styles.bannerTitle}>{bannerLabel}</h2>
       </div>
+
+      {campaign.error && (
+        <div className={styles.recoveryError} role="alert">
+          {campaign.error}
+        </div>
+      )}
+      {campaign.historyError && (
+        <div className={styles.recoveryError} role="alert">
+          {campaign.historyError}
+        </div>
+      )}
 
       {/* Stats */}
       <div className={styles.stats}>

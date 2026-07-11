@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { CampaignOrchestrator } from '@background/orchestrator';
-import type { PostDraft, CampaignSettings, GroupList } from '@shared/types';
+import type { PostDraft, CampaignSettings, GroupEntry, GroupList } from '@shared/types';
 import { STORAGE_KEYS } from '@shared/constants';
 
 // ── Fixtures ───────────────────────────────────────────────────────────────
@@ -96,6 +96,50 @@ describe('CampaignOrchestrator', () => {
   });
 
   describe('start', () => {
+    it('snapshots target groups so caller mutations cannot alter the campaign', async () => {
+      const sourceGroups: GroupEntry[] = [
+        {
+          url: 'https://www.facebook.com/groups/original-group',
+          label: 'Original group',
+        },
+      ];
+      const orch = new CampaignOrchestrator();
+      const startPromise = orch.start(mockDraft, sourceGroups, mockSettings);
+
+      sourceGroups[0].url = 'https://www.facebook.com/groups/mutated-group';
+      sourceGroups[0].label = 'Mutated group';
+      sourceGroups.push({ url: 'https://www.facebook.com/groups/added-later' });
+
+      await vi.runAllTimersAsync();
+      await startPromise;
+
+      expect(orch.currentCampaign?.targetGroups).toEqual([
+        {
+          url: 'https://www.facebook.com/groups/original-group',
+          label: 'Original group',
+        },
+      ]);
+    });
+
+    it('does not write campaign targets into saved group-list storage', async () => {
+      const orch = new CampaignOrchestrator();
+      const groups: GroupEntry[] = [
+        { url: 'https://www.facebook.com/groups/campaign-only' },
+      ];
+      const startPromise = orch.start(mockDraft, groups, mockSettings);
+
+      await vi.runAllTimersAsync();
+      await startPromise;
+
+      const storageWrites = vi.mocked(chrome.storage.local.set).mock.calls.map(
+        ([value]) => value as Record<string, unknown>,
+      );
+      const storageReads = vi.mocked(chrome.storage.local.get).mock.calls.map(([key]) => key);
+      expect(storageWrites.some((value) => STORAGE_KEYS.GROUP_LISTS in value)).toBe(false);
+      expect(storageWrites.some((value) => STORAGE_KEYS.CAMPAIGN_STATE in value)).toBe(true);
+      expect(storageReads).not.toContain(STORAGE_KEYS.GROUP_LISTS);
+    });
+
     it('transitions to running', async () => {
       const orch = new CampaignOrchestrator();
       const startPromise = orch.start(mockDraft, 'list-1', mockSettings);
@@ -140,6 +184,29 @@ describe('CampaignOrchestrator', () => {
       await vi.runAllTimersAsync();
     });
 
+    it('snapshots settings before hydration so later edits affect only future campaigns', async () => {
+      const settings: CampaignSettings = {
+        delayMinSeconds: 30,
+        delayMaxSeconds: 60,
+        maxRetries: 2,
+      };
+      const orch = new CampaignOrchestrator();
+      const startPromise = orch.start(mockDraft, 'list-1', settings);
+
+      settings.delayMinSeconds = 5;
+      settings.delayMaxSeconds = 10;
+      settings.maxRetries = 0;
+
+      await vi.runAllTimersAsync();
+      await startPromise;
+
+      expect(orch.currentCampaign?.settings).toEqual({
+        delayMinSeconds: 30,
+        delayMaxSeconds: 60,
+        maxRetries: 2,
+      });
+    });
+
     it('persists campaign state to storage', async () => {
       const orch = new CampaignOrchestrator();
       const promise = orch.start(mockDraft, 'list-1', mockSettings);
@@ -164,15 +231,15 @@ describe('CampaignOrchestrator', () => {
       expect(chrome.runtime.sendMessage).toHaveBeenCalled();
     });
 
-    it('does nothing with empty group list', async () => {
-      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    it('rejects an empty group list without creating a campaign', async () => {
       setupStorageMock([{ ...mockGroupList, id: 'list-1', groups: [] }]);
 
       const orch = new CampaignOrchestrator();
-      await orch.start(mockDraft, 'list-1', mockSettings);
+      await expect(orch.start(mockDraft, 'list-1', mockSettings)).rejects.toThrow(
+        'No campaign target groups found.',
+      );
 
       expect(orch.status).toBe('idle');
-      errorSpy.mockRestore();
     });
   });
 
@@ -228,9 +295,9 @@ describe('CampaignOrchestrator', () => {
       expect(orch.status).toBe('completed');
     });
 
-    it('resume does nothing when not paused', async () => {
+    it('reports an actionable error when no paused campaign exists', async () => {
       const orch = new CampaignOrchestrator();
-      await orch.resume();
+      await expect(orch.resume()).rejects.toThrow('No paused campaign to resume');
       expect(orch.status).toBe('idle');
     });
   });
@@ -281,9 +348,9 @@ describe('CampaignOrchestrator', () => {
       expect(orch.status).toBe('cancelled');
     });
 
-    it('cancel when idle does nothing', async () => {
+    it('reports an actionable error when no active campaign exists', async () => {
       const orch = new CampaignOrchestrator();
-      await orch.cancel();
+      await expect(orch.cancel()).rejects.toThrow('No active campaign to cancel');
       expect(orch.status).toBe('idle');
     });
   });
@@ -334,12 +401,12 @@ describe('CampaignOrchestrator', () => {
       expect(orch.status).toBe('failed');
     });
 
-    it('campaign completes when some groups succeed', async () => {
+    it('reports completed-with-issues when successful and failed posts are mixed', async () => {
       let callCount = 0;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       vi.mocked(chrome.tabs.sendMessage).mockImplementation((() => {
         callCount++;
-        const status = callCount <= 2 ? 'success' : 'failed';
+        const status = callCount === 1 ? 'success' : 'failed';
         return Promise.resolve({
           type: 'POST_RESULT',
           payload: { groupUrl: '', status, timestamp: Date.now() },
@@ -359,12 +426,68 @@ describe('CampaignOrchestrator', () => {
       await vi.runAllTimersAsync();
       await p;
 
-      // At least one succeeded, so campaign should be 'completed' not 'failed'
-      expect(orch.status).toBe('completed');
+      expect(orch.status).toBe('completed-with-issues');
     });
   });
 
   describe('crash recovery', () => {
+    it('hydrates and persists targetGroups from one legacy group-list lookup', async () => {
+      const legacyGroups: GroupEntry[] = [
+        {
+          url: 'https://www.facebook.com/groups/legacy-one',
+          label: 'Legacy one',
+        },
+        { url: 'https://www.facebook.com/groups/legacy-two' },
+      ];
+      const legacyList: GroupList = {
+        id: 'legacy-list',
+        name: 'Legacy campaign targets',
+        groups: legacyGroups,
+        createdAt: 1000,
+        updatedAt: 1000,
+      };
+      const legacyCampaign = {
+        id: 'legacy-campaign',
+        postDraft: mockDraft,
+        groupListId: legacyList.id,
+        status: 'paused',
+        currentIndex: 1,
+        totalGroups: legacyGroups.length,
+        results: [{ groupUrl: legacyGroups[0].url, status: 'success', timestamp: 1000 }],
+        startedAt: 1000,
+        settings: mockSettings,
+      };
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      vi.mocked(chrome.storage.local.get).mockImplementation((async (keys: any) => {
+        if (keys === STORAGE_KEYS.CAMPAIGN_STATE) {
+          return { [STORAGE_KEYS.CAMPAIGN_STATE]: legacyCampaign };
+        }
+        if (keys === STORAGE_KEYS.GROUP_LISTS) {
+          return { [STORAGE_KEYS.GROUP_LISTS]: [legacyList] };
+        }
+        return {};
+      }) as any);
+
+      const orch = new CampaignOrchestrator();
+      await orch.recoverFromCrash();
+
+      expect(orch.currentCampaign?.targetGroups).toEqual(legacyGroups);
+      expect(
+        vi.mocked(chrome.storage.local.get).mock.calls.filter(
+          ([keys]) => keys === STORAGE_KEYS.GROUP_LISTS,
+        ),
+      ).toHaveLength(1);
+      expect(chrome.storage.local.set).toHaveBeenCalledWith({
+        [STORAGE_KEYS.CAMPAIGN_STATE]: expect.objectContaining({
+          targetGroups: legacyGroups,
+        }),
+      });
+
+      legacyGroups[0].label = 'Changed after recovery';
+      expect(orch.currentCampaign?.targetGroups[0].label).toBe('Legacy one');
+    });
+
     it('restores paused campaign from storage', async () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       vi.mocked(chrome.storage.local.get).mockImplementation((async (keys: any) => {
@@ -376,7 +499,13 @@ describe('CampaignOrchestrator', () => {
               groupListId: 'list-1',
               status: 'paused',
               currentIndex: 1,
-              results: [{ groupUrl: 'g1', status: 'success', timestamp: 1000 }],
+              results: [
+                {
+                  groupUrl: 'https://www.facebook.com/groups/group1',
+                  status: 'success',
+                  timestamp: 1000,
+                },
+              ],
               startedAt: 1000,
               settings: mockSettings,
             },

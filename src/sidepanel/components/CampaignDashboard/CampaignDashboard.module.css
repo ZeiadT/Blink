@@ -101,6 +101,16 @@
   border-radius: var(--radius-md);
 }
 
+.actionError {
+  padding: var(--space-3);
+  color: var(--color-text-secondary);
+  background: var(--color-error-muted);
+  border: var(--border-width) solid color-mix(in srgb, var(--color-error) 42%, transparent);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-normal);
+}
+
 /* ── Controls ── */
 .controls {
   display: flex;
