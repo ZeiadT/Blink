@@ -11,3 +11,14 @@
   gap: var(--space-3);
   padding: var(--space-4) 0;
 }
+
+.error {
+  margin: 0;
+  padding: var(--space-3);
+  border: var(--border-width) solid var(--color-error);
+  border-radius: var(--radius-lg);
+  color: var(--color-error);
+  background: var(--color-error-muted);
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-normal);
+}

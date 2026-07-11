@@ -5,11 +5,22 @@ import React from 'react';
 import { GroupManager } from '@sidepanel/components/GroupManager/GroupManager';
 import { useGroupStore } from '@sidepanel/store/groupStore';
 
+const group = (groupId: string) => ({
+  groupId,
+  url: `https://www.facebook.com/groups/${groupId}`,
+  name: groupId,
+});
+
 beforeEach(() => {
   useGroupStore.setState({
     activeGroups: [],
     savedLists: [],
     isLoaded: true,
+    isPersisting: false,
+    isPreviewingImport: false,
+    catalogError: null,
+    importPreview: null,
+    catalogRevision: 0,
   });
 });
 
@@ -17,6 +28,7 @@ describe('GroupManager', () => {
   it('should render URL input area', () => {
     render(<GroupManager />);
     expect(screen.getByLabelText('Group URLs input')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /import groups/i })).toBeInTheDocument();
   });
 
   it('should show empty state when no groups', () => {
@@ -26,10 +38,7 @@ describe('GroupManager', () => {
 
   it('should show group count after adding URLs', () => {
     useGroupStore.setState({
-      activeGroups: [
-        { url: 'https://facebook.com/groups/test1' },
-        { url: 'https://facebook.com/groups/test2' },
-      ],
+      activeGroups: [group('test1'), group('test2')],
       isLoaded: true,
     });
     render(<GroupManager />);
@@ -43,7 +52,7 @@ describe('GroupManager', () => {
 
   it('should show save button when groups exist', () => {
     useGroupStore.setState({
-      activeGroups: [{ url: 'https://facebook.com/groups/test1' }],
+      activeGroups: [group('test1')],
       isLoaded: true,
     });
     render(<GroupManager />);
@@ -57,12 +66,12 @@ describe('GroupManager', () => {
 
   it('should show saved list name in list', () => {
     useGroupStore.setState({
-      activeGroups: [{ url: 'https://facebook.com/groups/test1' }],
+      activeGroups: [group('test1')],
       savedLists: [
         {
           id: '1',
           name: 'My List',
-          groups: [{ url: 'https://facebook.com/groups/test1' }],
+          groups: [group('test1')],
           createdAt: Date.now(),
           updatedAt: Date.now(),
         },

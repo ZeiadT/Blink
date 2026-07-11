@@ -30,7 +30,9 @@ const SaveForm: React.FC<SaveFormProps> = ({ groupCount, onSave, onCancel }) => 
 
   return (
     <div className={styles.saveForm}>
-      <label className={styles.saveLabel} htmlFor="list-name-input">List name</label>
+      <label className={styles.saveLabel} htmlFor="list-name-input">
+        List name
+      </label>
       <input
         ref={inputRef}
         id="list-name-input"
@@ -51,7 +53,13 @@ const SaveForm: React.FC<SaveFormProps> = ({ groupCount, onSave, onCancel }) => 
 };
 
 export const SavedLists: React.FC = () => {
-  const { activeGroups, savedLists, saveList, loadList, deleteList, renameList } = useGroupStore();
+  const activeGroups = useGroupStore((state) => state.activeGroups);
+  const savedLists = useGroupStore((state) => state.savedLists);
+  const isPersisting = useGroupStore((state) => state.isPersisting);
+  const saveList = useGroupStore((state) => state.saveList);
+  const loadList = useGroupStore((state) => state.loadList);
+  const deleteList = useGroupStore((state) => state.deleteList);
+  const renameList = useGroupStore((state) => state.renameList);
   const [showSaveModal, setShowSaveModal] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
@@ -60,26 +68,36 @@ export const SavedLists: React.FC = () => {
   const handleCloseModal = useCallback(() => setShowSaveModal(false), []);
 
   const handleSave = useCallback(
-    (name: string) => {
-      saveList(name);
-      setShowSaveModal(false);
-      showToast('success', `List "${name}" saved.`);
+    async (name: string) => {
+      const result = await saveList(name);
+      if (result.ok) {
+        setShowSaveModal(false);
+        showToast('success', `List "${name}" saved.`);
+      } else {
+        showToast('error', result.error ?? 'Could not save list.');
+      }
     },
     [saveList],
   );
 
   const handleLoad = useCallback(
-    (listId: string, name: string) => {
-      loadList(listId);
-      showToast('info', `Loaded "${name}".`);
+    async (listId: string, name: string) => {
+      const result = await loadList(listId);
+      showToast(
+        result.ok ? 'info' : 'error',
+        result.ok ? `Loaded "${name}".` : (result.error ?? 'Could not load list.'),
+      );
     },
     [loadList],
   );
 
   const handleDelete = useCallback(
-    (listId: string, name: string) => {
-      deleteList(listId);
-      showToast('info', `Deleted "${name}".`);
+    async (listId: string, name: string) => {
+      const result = await deleteList(listId);
+      showToast(
+        result.ok ? 'info' : 'error',
+        result.ok ? `Deleted "${name}".` : (result.error ?? 'Could not delete list.'),
+      );
     },
     [deleteList],
   );
@@ -89,10 +107,13 @@ export const SavedLists: React.FC = () => {
     setEditName(currentName);
   }, []);
 
-  const handleFinishRename = useCallback(() => {
+  const handleFinishRename = useCallback(async () => {
     if (editingId && editName.trim()) {
-      renameList(editingId, editName.trim());
-      showToast('success', 'List renamed.');
+      const result = await renameList(editingId, editName.trim());
+      showToast(
+        result.ok ? 'success' : 'error',
+        result.ok ? 'List renamed.' : (result.error ?? 'Could not rename list.'),
+      );
     }
     setEditingId(null);
     setEditName('');
@@ -110,7 +131,7 @@ export const SavedLists: React.FC = () => {
           size="sm"
           icon={Save}
           onClick={() => setShowSaveModal(true)}
-          disabled={activeGroups.length === 0}
+          disabled={activeGroups.length === 0 || isPersisting}
         >
           Save current
         </Button>
@@ -128,10 +149,13 @@ export const SavedLists: React.FC = () => {
                     className={styles.renameInput}
                     value={editName}
                     onChange={(e) => setEditName(e.target.value)}
-                    onBlur={handleFinishRename}
+                    onBlur={() => void handleFinishRename()}
                     onKeyDown={(e) => {
-                      if (e.key === 'Enter') handleFinishRename();
-                      if (e.key === 'Escape') { setEditingId(null); setEditName(''); }
+                      if (e.key === 'Enter') void handleFinishRename();
+                      if (e.key === 'Escape') {
+                        setEditingId(null);
+                        setEditName('');
+                      }
                     }}
                     autoFocus
                     aria-label="Rename list"
@@ -146,7 +170,8 @@ export const SavedLists: React.FC = () => {
               <div className={styles.itemActions}>
                 <button
                   className={styles.actionButton}
-                  onClick={() => handleLoad(list.id, list.name)}
+                  onClick={() => void handleLoad(list.id, list.name)}
+                  disabled={isPersisting}
                   aria-label={`Load ${list.name}`}
                   title="Load list"
                 >
@@ -157,14 +182,16 @@ export const SavedLists: React.FC = () => {
                   onClick={() => handleStartRename(list.id, list.name)}
                   aria-label={`Rename ${list.name}`}
                   title="Rename"
+                  disabled={isPersisting}
                 >
                   <Edit3 size={14} />
                 </button>
                 <button
                   className={`${styles.actionButton} ${styles.deleteButton}`}
-                  onClick={() => handleDelete(list.id, list.name)}
+                  onClick={() => void handleDelete(list.id, list.name)}
                   aria-label={`Delete ${list.name}`}
                   title="Delete"
+                  disabled={isPersisting}
                 >
                   <Trash2 size={14} />
                 </button>
