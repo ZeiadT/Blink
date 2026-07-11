@@ -1,5 +1,5 @@
 // ── Facebook Post Composer Interaction ───────────────────────────────────
-// Drives the Lexical-based rich text editor via document.execCommand.
+// Drives the Lexical-based rich text editor via text insertion and native Lexical commands.
 //
 // Key insight from real Facebook DOM analysis (June 2026):
 //   - The composer trigger has NO aria-label, NO data-pagelet
@@ -45,6 +45,34 @@ export { SelectorTimeoutError };
 const CHAR_DELAY_MIN_MS = 5;
 const CHAR_DELAY_MAX_MS = 20;
 const UPLOAD_TIMEOUT_PER_FILE_MS = 30_000;
+const TEXT_VERIFICATION_TIMEOUT_MS = 1_000;
+const TEXT_VERIFICATION_POLL_INTERVAL_MS = 25;
+
+const BLOCK_ELEMENT_TAGS = new Set([
+  'ADDRESS',
+  'ARTICLE',
+  'ASIDE',
+  'BLOCKQUOTE',
+  'DIV',
+  'FIGCAPTION',
+  'FIGURE',
+  'FOOTER',
+  'HEADER',
+  'H1',
+  'H2',
+  'H3',
+  'H4',
+  'H5',
+  'H6',
+  'LI',
+  'MAIN',
+  'NAV',
+  'OL',
+  'P',
+  'PRE',
+  'SECTION',
+  'UL',
+]);
 
 // ── Module State ─────────────────────────────────────────────────────────
 
@@ -59,6 +87,95 @@ function randomInt(min: number, max: number): number {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** Facebook insertion accepts canonical LF paragraph boundaries only. */
+export function normalizeComposerText(text: string): string {
+  return text.replace(/\r\n?/g, '\n');
+}
+
+/** Normalize browser-only DOM differences without changing post content. */
+export function normalizeComposerVerificationText(text: string): string {
+  return normalizeComposerText(text).replace(/\u00a0/g, ' ');
+}
+
+function isBlockElement(node: Node): node is HTMLElement {
+  return node instanceof HTMLElement && BLOCK_ELEMENT_TAGS.has(node.tagName);
+}
+
+function isEmptyBlockPlaceholder(element: HTMLElement): boolean {
+  return element.childNodes.length === 1 && element.firstChild instanceof HTMLBRElement;
+}
+
+function readComposerNodeText(node: Node): string {
+  if (node.nodeType === Node.TEXT_NODE) return node.textContent ?? '';
+  if (node instanceof HTMLBRElement) return '\n';
+  if (!(node instanceof HTMLElement)) return '';
+  if (isEmptyBlockPlaceholder(node)) return '';
+
+  return Array.from(node.childNodes, readComposerNodeText).join('');
+}
+
+/**
+ * Read Lexical DOM as logical plain text. `textContent` loses paragraph and
+ * `<br>` boundaries, while `innerText` adds browser-specific visual spacing.
+ */
+export function readComposerText(editor: HTMLElement): string {
+  let text = '';
+  let previousTopLevelBlock = false;
+
+  for (const node of Array.from(editor.childNodes)) {
+    const isTopLevelBlock = isBlockElement(node);
+    if (isTopLevelBlock && previousTopLevelBlock) text += '\n';
+
+    text += readComposerNodeText(node);
+    previousTopLevelBlock = isTopLevelBlock;
+  }
+
+  return text;
+}
+
+/** Send Enter through Lexical's keydown listener so it creates a new paragraph. */
+export function dispatchComposerEnter(editor: HTMLElement): void {
+  editor.dispatchEvent(new KeyboardEvent('keydown', {
+    key: 'Enter',
+    code: 'Enter',
+    bubbles: true,
+    cancelable: true,
+    composed: true,
+  }));
+}
+
+function firstTextDifference(expected: string, actual: string): number {
+  const length = Math.min(expected.length, actual.length);
+  for (let index = 0; index < length; index++) {
+    if (expected[index] !== actual[index]) return index;
+  }
+  return length;
+}
+
+/** Wait for Lexical reconciliation, then reject content that would post incorrectly. */
+export async function verifyComposerText(
+  editor: HTMLElement,
+  expectedText: string,
+  timeoutMs: number = TEXT_VERIFICATION_TIMEOUT_MS,
+): Promise<void> {
+  const expected = normalizeComposerVerificationText(expectedText);
+  const deadline = Date.now() + timeoutMs;
+  let actual = normalizeComposerVerificationText(readComposerText(editor));
+
+  while (actual !== expected && Date.now() < deadline) {
+    await sleep(TEXT_VERIFICATION_POLL_INTERVAL_MS);
+    actual = normalizeComposerVerificationText(readComposerText(editor));
+  }
+
+  if (actual !== expected) {
+    const difference = firstTextDifference(expected, actual);
+    throw new ComposerError(
+      `Composer text verification failed at character ${difference} ` +
+      `(expected ${expected.length}, received ${actual.length})`,
+    );
+  }
 }
 
 function simulateClick(element: Element): void {
@@ -118,18 +235,19 @@ export async function openComposer(): Promise<void> {
 }
 
 /**
- * Types text into the Lexical editor using document.execCommand.
+ * Types text into the Lexical editor using document.execCommand for characters
+ * and Lexical's own keydown handling for paragraph boundaries.
  *
- * execCommand('insertText') fires trusted beforeinput/input events
- * that Lexical actually processes (unlike manually dispatched synthetic
- * events which are untrusted and ignored).
+ * execCommand('insertText') fires events Lexical processes. Newlines use a
+ * bubbling Enter event because Facebook's editor owns paragraph creation.
  *
  * Random delay between chars (5–20ms) for realism.
  */
 export async function typeText(text: string): Promise<void> {
-  if (!text) return;
+  const normalizedText = normalizeComposerText(text);
+  if (!normalizedText) return;
 
-  console.log('[Blink:Composer] Typing text...', text.length, 'chars');
+  console.log('[Blink:Composer] Typing text...', normalizedText.length, 'chars');
 
   const editor = await waitForElement(LEXICAL_EDITOR, 5_000, getDialogRoot()) as HTMLElement;
   editor.focus();
@@ -137,23 +255,16 @@ export async function typeText(text: string): Promise<void> {
   // Settle delay after focus
   await sleep(100);
 
-  for (const char of text) {
+  for (const char of normalizedText) {
     if (char === '\n') {
-      document.execCommand('insertParagraph', false);
+      dispatchComposerEnter(editor);
     } else {
       document.execCommand('insertText', false, char);
     }
     await sleep(randomInt(CHAR_DELAY_MIN_MS, CHAR_DELAY_MAX_MS));
   }
 
-  // Verify text was inserted
-  const content = editor.textContent ?? '';
-  const expectedSnippet = text.replace(/\n/g, '').slice(0, 30);
-  if (expectedSnippet && !content.includes(expectedSnippet)) {
-    console.warn('[Blink:Composer] Text verification warning — editor content may not match typed text');
-    console.warn('[Blink:Composer] Expected snippet:', JSON.stringify(expectedSnippet));
-    console.warn('[Blink:Composer] Editor content:', JSON.stringify(content.slice(0, 100)));
-  }
+  await verifyComposerText(editor, normalizedText);
 
   console.log('[Blink:Composer] Text typed successfully');
 }
