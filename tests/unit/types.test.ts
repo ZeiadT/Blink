@@ -13,9 +13,13 @@ import { generateId, formatFileSize, truncate } from '@shared/utils';
 describe('Constants', () => {
   it('should have all required storage keys', () => {
     expect(STORAGE_KEYS.POST_DRAFT).toBe('blink_post_draft');
+    expect(STORAGE_KEYS.SAVED_POSTS).toBe('blink_saved_posts');
+    expect(STORAGE_KEYS.CAMPAIGN_DRAFT).toBe('blink_campaign_draft');
+    expect(STORAGE_KEYS.POST_LIBRARY_SCHEMA).toBe('blink_post_library_schema');
     expect(STORAGE_KEYS.GROUP_LISTS).toBe('blink_group_lists');
     expect(STORAGE_KEYS.ACTIVE_GROUPS).toBe('blink_active_groups');
     expect(STORAGE_KEYS.CAMPAIGN_STATE).toBe('blink_campaign_state');
+    expect(STORAGE_KEYS.CAMPAIGN_HISTORY).toBe('blink_campaign_history');
     expect(STORAGE_KEYS.SETTINGS).toBe('blink_settings');
   });
 
@@ -139,7 +143,7 @@ describe('Type Shapes (compile-time validation)', () => {
         createdAt: Date.now(),
         updatedAt: Date.now(),
       },
-      groupListId: '1',
+      targetGroups: [],
       status: 'idle',
       currentIndex: 0,
       totalGroups: 0,
@@ -155,10 +159,11 @@ describe('Type Shapes (compile-time validation)', () => {
       'running',
       'paused',
       'completed',
+      'completed-with-issues',
       'failed',
       'cancelled',
     ];
-    expect(validStatuses).toHaveLength(6);
+    expect(validStatuses).toHaveLength(7);
   });
 
   it('should create a valid MediaFile', () => {
@@ -184,7 +189,7 @@ describe('Type Shapes (compile-time validation)', () => {
           createdAt: Date.now(),
           updatedAt: Date.now(),
         },
-        groupListId: '1',
+        targetGroups: [],
         settings: DEFAULT_CAMPAIGN_SETTINGS,
       },
     };

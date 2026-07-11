@@ -1,82 +1,112 @@
 // Blink — Background Service Worker
-// Routes messages from side panel to CampaignOrchestrator.
+// Background owns campaign execution; side panel only sends intent and reads state.
 
 import { CampaignOrchestrator } from './orchestrator';
 import {
-  isStartCampaign,
+  createCampaignHistoryResponse,
+  createCampaignStatusResponse,
+  isCancelCampaign,
+  isDismissCampaign,
+  isGetCampaignHistory,
+  isGetCampaignStatus,
   isPauseCampaign,
   isResumeCampaign,
-  isCancelCampaign,
-  isGetCampaignStatus,
-  createStatusUpdateMessage,
+  isStartCampaign,
 } from '@shared/messages';
-
-// ── Instantiate orchestrator (module-level singleton) ─────────────────────
+import type { CampaignHistoryResponse, CampaignStatusResponse } from '@shared/types';
 
 const orchestrator = new CampaignOrchestrator();
 
-// ── Open side panel when extension icon is clicked ────────────────────────
-
 chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(console.error);
 
-// ── Message routing ──────────────────────────────────────────────────────
-
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-  if (isStartCampaign(message)) {
-    const { postDraft, groupListId, settings } = message.payload;
-    orchestrator.start(postDraft, groupListId, settings).catch(console.error);
-    sendResponse({ ok: true });
-    return true;
+  if (
+    !isStartCampaign(message) &&
+    !isPauseCampaign(message) &&
+    !isResumeCampaign(message) &&
+    !isCancelCampaign(message) &&
+    !isGetCampaignStatus(message) &&
+    !isGetCampaignHistory(message) &&
+    !isDismissCampaign(message)
+  ) {
+    return false;
   }
 
-  if (isPauseCampaign(message)) {
-    orchestrator.pause();
-    sendResponse({ ok: true });
-    return true;
-  }
-
-  if (isResumeCampaign(message)) {
-    orchestrator.resume().catch(console.error);
-    sendResponse({ ok: true });
-    return true;
-  }
-
-  if (isCancelCampaign(message)) {
-    orchestrator.cancel().catch(console.error);
-    sendResponse({ ok: true });
-    return true;
-  }
-
-  if (isGetCampaignStatus(message)) {
-    const campaign = orchestrator.currentCampaign;
-    if (campaign) {
-      sendResponse(createStatusUpdateMessage(campaign));
-    } else {
-      sendResponse({ type: 'CAMPAIGN_STATUS_UPDATE', payload: null });
-    }
-    return true;
-  }
-
-  return false;
+  void routeCampaignMessage(message)
+    .then(sendResponse)
+    .catch((error: unknown) => {
+      const details = formatError(error);
+      sendResponse(
+        isGetCampaignHistory(message)
+          ? createCampaignHistoryResponse([], details)
+          : createCampaignStatusResponse(orchestrator.currentCampaign, details),
+      );
+    });
+  return true;
 });
-
-// ── Lifecycle events ─────────────────────────────────────────────────────
 
 chrome.runtime.onInstalled.addListener((details) => {
   console.log('[Blink] Extension installed:', details.reason);
-  orchestrator.recoverFromCrash().catch(console.error);
+  void orchestrator.recoverFromCrash().catch(console.error);
 });
 
 chrome.runtime.onStartup.addListener(() => {
   console.log('[Blink] Browser started, service worker waking up.');
-  orchestrator.recoverFromCrash().catch(console.error);
+  void orchestrator.recoverFromCrash().catch(console.error);
 });
-
-// ── Keep-alive alarm handler ─────────────────────────────────────────────
 
 chrome.alarms.onAlarm.addListener((alarm) => {
-  if (alarm.name === 'blink-keepalive') {
-    // No-op — just keeps service worker alive
-    console.log('[Blink] Keep-alive ping');
-  }
+  void orchestrator.handleAlarm(alarm.name).catch(console.error);
 });
+
+// A worker can be started by an alarm or a side-panel message without a
+// startup event. Single-flight hydration inside the runner makes this safe.
+void orchestrator.recoverFromCrash().catch(console.error);
+
+async function routeCampaignMessage(
+  message: unknown,
+): Promise<CampaignStatusResponse | CampaignHistoryResponse> {
+  if (isStartCampaign(message)) {
+    const { postDraft, settings } = message.payload;
+    const targetGroups =
+      'targetGroups' in message.payload
+        ? message.payload.targetGroups
+        : message.payload.groupListId;
+    await orchestrator.start(postDraft, targetGroups, settings);
+    return createCampaignStatusResponse(await orchestrator.getStatus());
+  }
+
+  if (isPauseCampaign(message)) {
+    await orchestrator.pause();
+    return createCampaignStatusResponse(await orchestrator.getStatus());
+  }
+
+  if (isResumeCampaign(message)) {
+    await orchestrator.resume();
+    return createCampaignStatusResponse(await orchestrator.getStatus());
+  }
+
+  if (isCancelCampaign(message)) {
+    await orchestrator.cancel();
+    return createCampaignStatusResponse(await orchestrator.getStatus());
+  }
+
+  if (isDismissCampaign(message)) {
+    await orchestrator.dismiss();
+    return createCampaignStatusResponse(await orchestrator.getStatus());
+  }
+
+  if (isGetCampaignStatus(message)) {
+    return createCampaignStatusResponse(await orchestrator.getStatus());
+  }
+
+  if (isGetCampaignHistory(message)) {
+    return createCampaignHistoryResponse(await orchestrator.getHistory());
+  }
+
+  return createCampaignStatusResponse(null, 'Unsupported campaign message.');
+}
+
+function formatError(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}

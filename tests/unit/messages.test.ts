@@ -5,6 +5,8 @@ import {
   isResumeCampaign,
   isCancelCampaign,
   isGetCampaignStatus,
+  isGetCampaignHistory,
+  isDismissCampaign,
   isPopupMessage,
   isExecutePost,
   isBackgroundToContentMessage,
@@ -16,11 +18,23 @@ import {
   createResumeCampaignMessage,
   createCancelCampaignMessage,
   createGetCampaignStatusMessage,
+  createGetCampaignHistoryMessage,
+  createDismissCampaignMessage,
   createExecutePostMessage,
   createPostResultMessage,
   createStatusUpdateMessage,
+  createCampaignStatusResponse,
+  createCampaignHistoryResponse,
+  isCampaignStatusResponse,
+  isCampaignHistoryResponse,
 } from '@shared/messages';
-import type { PostDraft, CampaignSettings, Campaign } from '@shared/types';
+import type {
+  PostDraft,
+  CampaignSettings,
+  Campaign,
+  CampaignHistoryEntry,
+  CampaignStatusResponse,
+} from '@shared/types';
 
 // ── Fixtures ───────────────────────────────────────────────────────────────
 
@@ -41,7 +55,7 @@ const mockSettings: CampaignSettings = {
 const mockCampaign: Campaign = {
   id: 'campaign-1',
   postDraft: mockDraft,
-  groupListId: 'list-1',
+  targetGroups: [{ url: 'https://facebook.com/groups/group-1' }],
   status: 'running',
   currentIndex: 0,
   totalGroups: 3,
@@ -56,6 +70,18 @@ describe('isStartCampaign', () => {
   it('returns true for valid START_CAMPAIGN', () => {
     const msg = {
       type: 'START_CAMPAIGN',
+      payload: {
+        postDraft: mockDraft,
+        targetGroups: [{ url: 'https://facebook.com/groups/group-1' }],
+        settings: mockSettings,
+      },
+    };
+    expect(isStartCampaign(msg)).toBe(true);
+  });
+
+  it('returns true for legacy START_CAMPAIGN', () => {
+    const msg = {
+      type: 'START_CAMPAIGN',
       payload: { postDraft: mockDraft, groupListId: 'list-1', settings: mockSettings },
     };
     expect(isStartCampaign(msg)).toBe(true);
@@ -65,8 +91,47 @@ describe('isStartCampaign', () => {
     expect(isStartCampaign({ type: 'START_CAMPAIGN' })).toBe(false);
   });
 
-  it('returns false when payload missing groupListId', () => {
-    const msg = { type: 'START_CAMPAIGN', payload: { postDraft: mockDraft, settings: mockSettings } };
+  it('returns false when payload missing targetGroups and groupListId', () => {
+    const msg = {
+      type: 'START_CAMPAIGN',
+      payload: { postDraft: mockDraft, settings: mockSettings },
+    };
+    expect(isStartCampaign(msg)).toBe(false);
+  });
+
+  it('returns false for invalid campaign settings', () => {
+    const msg = {
+      type: 'START_CAMPAIGN',
+      payload: {
+        postDraft: mockDraft,
+        targetGroups: [{ url: 'https://facebook.com/groups/group-1' }],
+        settings: { ...mockSettings, delayMinSeconds: 20, delayMaxSeconds: 10 },
+      },
+    };
+    expect(isStartCampaign(msg)).toBe(false);
+  });
+
+  it('returns false for off-step campaign delays', () => {
+    const msg = {
+      type: 'START_CAMPAIGN',
+      payload: {
+        postDraft: mockDraft,
+        targetGroups: [{ url: 'https://facebook.com/groups/group-1' }],
+        settings: { ...mockSettings, delayMinSeconds: 31, delayMaxSeconds: 60 },
+      },
+    };
+    expect(isStartCampaign(msg)).toBe(false);
+  });
+
+  it('returns false for an incomplete post draft', () => {
+    const msg = {
+      type: 'START_CAMPAIGN',
+      payload: {
+        postDraft: { text: 'Missing draft fields' },
+        targetGroups: [{ url: 'https://facebook.com/groups/group-1' }],
+        settings: mockSettings,
+      },
+    };
     expect(isStartCampaign(msg)).toBe(false);
   });
 
@@ -127,16 +192,31 @@ describe('isGetCampaignStatus', () => {
   });
 });
 
+describe('campaign history messages', () => {
+  it('recognizes history and dismissal messages', () => {
+    expect(isGetCampaignHistory({ type: 'GET_CAMPAIGN_HISTORY' })).toBe(true);
+    expect(isDismissCampaign({ type: 'DISMISS_CAMPAIGN' })).toBe(true);
+    expect(isGetCampaignHistory({ type: 'GET_CAMPAIGN_STATUS' })).toBe(false);
+    expect(isDismissCampaign({ type: 'CANCEL_CAMPAIGN' })).toBe(false);
+  });
+});
+
 describe('isPopupMessage', () => {
   it('matches all popup message types', () => {
     expect(isPopupMessage({ type: 'PAUSE_CAMPAIGN' })).toBe(true);
     expect(isPopupMessage({ type: 'RESUME_CAMPAIGN' })).toBe(true);
     expect(isPopupMessage({ type: 'CANCEL_CAMPAIGN' })).toBe(true);
     expect(isPopupMessage({ type: 'GET_CAMPAIGN_STATUS' })).toBe(true);
+    expect(isPopupMessage({ type: 'GET_CAMPAIGN_HISTORY' })).toBe(true);
+    expect(isPopupMessage({ type: 'DISMISS_CAMPAIGN' })).toBe(true);
     expect(
       isPopupMessage({
         type: 'START_CAMPAIGN',
-        payload: { postDraft: mockDraft, groupListId: 'x', settings: mockSettings },
+        payload: {
+          postDraft: mockDraft,
+          targetGroups: [{ url: 'https://facebook.com/groups/group-1' }],
+          settings: mockSettings,
+        },
       }),
     ).toBe(true);
   });
@@ -201,8 +281,59 @@ describe('isStatusUpdate', () => {
     expect(isStatusUpdate({ type: 'CAMPAIGN_STATUS_UPDATE', payload: 'not-obj' })).toBe(false);
   });
 
+  it('accepts null after active campaign dismissal', () => {
+    expect(isStatusUpdate({ type: 'CAMPAIGN_STATUS_UPDATE', payload: null })).toBe(true);
+  });
+
   it('returns false for wrong type', () => {
     expect(isStatusUpdate({ type: 'OTHER', payload: {} })).toBe(false);
+  });
+});
+
+describe('isCampaignStatusResponse', () => {
+  it('returns true for a successful response with a campaign', () => {
+    expect(isCampaignStatusResponse({ ok: true, campaign: mockCampaign })).toBe(true);
+  });
+
+  it('returns true for a successful response with no active campaign', () => {
+    expect(isCampaignStatusResponse({ ok: true, campaign: null })).toBe(true);
+  });
+
+  it('returns true for an error response', () => {
+    expect(
+      isCampaignStatusResponse({ ok: false, campaign: null, error: 'Status unavailable' }),
+    ).toBe(true);
+  });
+
+  it('returns false for a malformed response', () => {
+    expect(isCampaignStatusResponse({ ok: 'yes', campaign: mockCampaign })).toBe(false);
+    expect(isCampaignStatusResponse({ ok: true })).toBe(false);
+    expect(isCampaignStatusResponse({ ok: true, campaign: 'campaign-1' })).toBe(false);
+    expect(isCampaignStatusResponse({ ok: false, campaign: null, error: 404 })).toBe(false);
+  });
+});
+
+describe('isCampaignHistoryResponse', () => {
+  const history: CampaignHistoryEntry[] = [
+    {
+      id: 'history-1',
+      status: 'completed-with-issues',
+      postText: 'Multiline\npost',
+      mediaCount: 0,
+      totalGroups: 2,
+      results: [],
+      settings: mockSettings,
+      completedAt: 2,
+    },
+  ];
+
+  it('accepts a typed history response', () => {
+    expect(isCampaignHistoryResponse({ ok: true, history })).toBe(true);
+  });
+
+  it('rejects malformed history responses', () => {
+    expect(isCampaignHistoryResponse({ ok: true, history: 'nope' })).toBe(false);
+    expect(isCampaignHistoryResponse({ ok: true, history: [{ id: 'missing fields' }] })).toBe(false);
   });
 });
 
@@ -210,10 +341,12 @@ describe('isStatusUpdate', () => {
 
 describe('message factories', () => {
   it('createStartCampaignMessage produces valid message', () => {
-    const msg = createStartCampaignMessage(mockDraft, 'list-1', mockSettings);
+    const targetGroups = [{ url: 'https://facebook.com/groups/group-1' }];
+    const msg = createStartCampaignMessage(mockDraft, targetGroups, mockSettings);
     expect(msg.type).toBe('START_CAMPAIGN');
     expect(msg.payload.postDraft).toBe(mockDraft);
-    expect(msg.payload.groupListId).toBe('list-1');
+    expect(msg.payload.targetGroups).toEqual(targetGroups);
+    expect(msg.payload.targetGroups).not.toBe(targetGroups);
     expect(msg.payload.settings).toBe(mockSettings);
     expect(isStartCampaign(msg)).toBe(true);
   });
@@ -242,10 +375,16 @@ describe('message factories', () => {
     expect(isGetCampaignStatus(msg)).toBe(true);
   });
 
+  it('creates typed history and dismissal messages', () => {
+    expect(isGetCampaignHistory(createGetCampaignHistoryMessage())).toBe(true);
+    expect(isDismissCampaign(createDismissCampaignMessage())).toBe(true);
+  });
+
   it('createExecutePostMessage produces valid message', () => {
-    const msg = createExecutePostMessage('hello', []);
+    const text = 'hello\r\n\r\nمرحبا 😀';
+    const msg = createExecutePostMessage(text, []);
     expect(msg.type).toBe('EXECUTE_POST');
-    expect(msg.payload.text).toBe('hello');
+    expect(msg.payload.text).toBe(text);
     expect(isExecutePost(msg)).toBe(true);
   });
 
@@ -262,5 +401,55 @@ describe('message factories', () => {
     expect(msg.type).toBe('CAMPAIGN_STATUS_UPDATE');
     expect(msg.payload).toBe(mockCampaign);
     expect(isStatusUpdate(msg)).toBe(true);
+  });
+
+  it('createCampaignStatusResponse produces a successful typed response', () => {
+    const response: CampaignStatusResponse = createCampaignStatusResponse(mockCampaign);
+
+    expect(response).toEqual({ ok: true, campaign: mockCampaign });
+    expect(isCampaignStatusResponse(response)).toBe(true);
+  });
+
+  it('createCampaignStatusResponse represents an empty status read', () => {
+    const response: CampaignStatusResponse = createCampaignStatusResponse(null);
+
+    expect(response).toEqual({ ok: true, campaign: null });
+    expect(isCampaignStatusResponse(response)).toBe(true);
+  });
+
+  it('createCampaignStatusResponse includes a typed failure', () => {
+    const response: CampaignStatusResponse = createCampaignStatusResponse(
+      null,
+      'Campaign state is invalid',
+    );
+
+    expect(response).toEqual({
+      ok: false,
+      campaign: null,
+      error: 'Campaign state is invalid',
+    });
+    expect(isCampaignStatusResponse(response)).toBe(true);
+  });
+
+  it('createCampaignHistoryResponse preserves records and failures', () => {
+    const history: CampaignHistoryEntry[] = [
+      {
+        id: 'history-1',
+        status: 'completed',
+        postText: 'Done',
+        mediaCount: 0,
+        totalGroups: 1,
+        results: [],
+        settings: mockSettings,
+        completedAt: 3,
+      },
+    ];
+
+    expect(createCampaignHistoryResponse(history)).toEqual({ ok: true, history });
+    expect(createCampaignHistoryResponse([], 'Storage unavailable')).toEqual({
+      ok: false,
+      history: [],
+      error: 'Storage unavailable',
+    });
   });
 });
