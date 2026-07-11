@@ -1,0 +1,402 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Architecture review — Blink</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script type="module">
+      import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+      mermaid.initialize({
+        startOnLoad: true,
+        theme: 'base',
+        securityLevel: 'loose',
+        themeVariables: {
+          primaryColor: '#e6eef5',
+          primaryTextColor: '#102b43',
+          primaryBorderColor: '#2b5876',
+          lineColor: '#66788a',
+          secondaryColor: '#dce9e4',
+          tertiaryColor: '#f7f3eb',
+          fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+        },
+      });
+    </script>
+    <style>
+      :root {
+        --ink: #102b43;
+        --blue: #2b5876;
+        --paper: #f7f3eb;
+        --fog: #e6eef5;
+        --green: #31755f;
+        --amber: #a56b22;
+        --signal: #bd4d3b;
+        --line: #b8c6d1;
+      }
+      body {
+        background:
+          linear-gradient(90deg, rgba(43, 88, 118, 0.045) 1px, transparent 1px),
+          linear-gradient(rgba(43, 88, 118, 0.045) 1px, transparent 1px),
+          var(--paper);
+        background-size: 28px 28px;
+      }
+      .hairline { border-color: var(--line); }
+      .diagram-paper {
+        background:
+          linear-gradient(90deg, rgba(43, 88, 118, 0.04) 1px, transparent 1px),
+          #fbfaf6;
+        background-size: 18px 18px;
+      }
+      .relay {
+        box-shadow: inset 0 -3px 0 var(--blue);
+      }
+      .seam {
+        border-style: dashed;
+        border-color: var(--blue);
+      }
+      .leak {
+        border-color: var(--signal);
+        color: #8f2f23;
+      }
+      .deep {
+        background: var(--ink);
+        color: #f8fbfd;
+        border-color: var(--ink);
+      }
+      .module-box {
+        min-height: 58px;
+        border-width: 1px;
+        border-radius: 0.5rem;
+        padding: 0.7rem;
+        font-size: 0.72rem;
+        font-weight: 700;
+        line-height: 1.15rem;
+      }
+      .terminal {
+        position: relative;
+        min-height: 260px;
+        overflow: hidden;
+      }
+      .terminal::before {
+        content: '';
+        position: absolute;
+        left: 16px;
+        right: 16px;
+        top: 50%;
+        border-top: 1px dashed rgba(43, 88, 118, 0.25);
+      }
+      .arrow {
+        color: var(--blue);
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 1rem;
+        font-weight: 800;
+      }
+      .warn-arrow {
+        color: var(--signal);
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 1rem;
+        font-weight: 800;
+      }
+      .mass {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0.55rem;
+        align-items: end;
+        height: 184px;
+      }
+      .mass > div {
+        display: flex;
+        flex-direction: column;
+        justify-content: end;
+        border: 1px solid var(--blue);
+        padding: 0.55rem;
+        color: var(--ink);
+        font: 700 0.68rem/1rem ui-monospace, SFMono-Regular, Menlo, monospace;
+      }
+      .mass small {
+        font: 600 0.6rem/0.82rem ui-monospace, SFMono-Regular, Menlo, monospace;
+        opacity: 0.7;
+      }
+      .tag {
+        font: 700 0.62rem/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+      .connector {
+        border-left: 2px solid var(--blue);
+      }
+      @media (max-width: 760px) {
+        .terminal { min-height: 0; }
+      }
+    </style>
+  </head>
+  <body class="text-slate-900 antialiased">
+    <main class="mx-auto max-w-6xl px-5 py-10 md:px-8">
+      <header class="mb-10 border-b-4 pb-6" style="border-color: var(--ink)">
+        <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <p class="tag text-slate-500">Blink / architecture review / 2026-07-10</p>
+          <div class="flex flex-wrap gap-2">
+            <span class="tag rounded-full border px-3 py-1 text-slate-600 hairline">solid = module</span>
+            <span class="tag rounded-full border border-dashed px-3 py-1 text-slate-600" style="border-color: var(--blue)">dash = seam</span>
+            <span class="tag rounded-full border px-3 py-1 leak">red = leakage</span>
+            <span class="tag rounded-full border px-3 py-1 deep">dark = deep module</span>
+          </div>
+        </div>
+        <div class="relay inline-block pr-8">
+          <h1 class="font-serif text-4xl font-semibold tracking-tight md:text-5xl">Run-state relay board</h1>
+        </div>
+        <div class="mt-4 grid gap-3 text-sm md:grid-cols-4">
+          <div class="border-l-4 pl-3" style="border-color: var(--signal)"><span class="tag">01</span><br />saved groups leak</div>
+          <div class="border-l-4 pl-3" style="border-color: var(--amber)"><span class="tag">02</span><br />run loop is volatile</div>
+          <div class="border-l-4 pl-3" style="border-color: var(--green)"><span class="tag">03</span><br />group identity is shallow</div>
+          <div class="border-l-4 pl-3" style="border-color: var(--blue)"><span class="tag">04</span><br />post reuse shares draft state</div>
+        </div>
+      </header>
+
+      <section id="candidates" class="space-y-10">
+        <article id="campaign-snapshot" class="overflow-hidden border bg-white shadow-sm hairline">
+          <div class="border-b px-6 py-5 hairline">
+            <div class="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p class="tag text-slate-500">Candidate 01</p>
+                <h2 class="mt-1 font-serif text-3xl font-semibold">Keep campaign target snapshots out of saved-group catalog</h2>
+              </div>
+              <div class="flex gap-2">
+                <span class="tag rounded-full bg-emerald-100 px-3 py-2 text-emerald-800">Strong</span>
+                <span class="tag rounded-full bg-slate-100 px-3 py-2 text-slate-600">in-process</span>
+              </div>
+            </div>
+            <p class="mt-4 font-mono text-xs text-slate-600">src/sidepanel/store/campaignStore.ts · src/sidepanel/store/groupStore.ts · src/background/orchestrator.ts · src/background/storage.ts · src/shared/types.ts</p>
+          </div>
+          <div class="grid gap-5 p-6 lg:grid-cols-2">
+            <div class="diagram-paper terminal border p-4 hairline">
+              <p class="tag mb-4 text-slate-500">Before / one key, two domains</p>
+              <div class="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+                <div class="space-y-3">
+                  <div class="module-box border hairline">Group catalog module<br /><span class="font-normal text-slate-500">saved lists</span></div>
+                  <div class="module-box border hairline">Campaign module<br /><span class="font-normal text-slate-500">run targets</span></div>
+                </div>
+                <div class="space-y-7 text-center">
+                  <div class="arrow">→</div>
+                  <div class="warn-arrow">→</div>
+                </div>
+                <div class="module-box border leak min-h-[145px] flex items-center">blink_group_lists<br /><span class="mt-2 font-normal">saved interface and campaign implementation share one store</span></div>
+              </div>
+              <p class="mt-4 text-xs font-semibold leak">Leakage: campaign target write reappears as saved list.</p>
+            </div>
+            <div class="diagram-paper terminal border p-4 hairline">
+              <p class="tag mb-4 text-slate-500">After / one owner per persistence seam</p>
+              <div class="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+                <div class="space-y-3">
+                  <div class="module-box deep">Saved-group catalog module<br /><span class="font-normal text-slate-300">normalization + migration inside</span></div>
+                  <div class="module-box deep">Campaign snapshot module<br /><span class="font-normal text-slate-300">immutable targets inside</span></div>
+                </div>
+                <div class="space-y-7 text-center"><div class="arrow">→</div><div class="arrow">→</div></div>
+                <div class="space-y-3">
+                  <div class="module-box seam">saved-group keys<br /><span class="font-normal">catalog only</span></div>
+                  <div class="module-box seam">campaign keys<br /><span class="font-normal">runner only</span></div>
+                </div>
+              </div>
+              <p class="mt-4 text-xs font-semibold text-emerald-800">Two domains; two persistence seams; no mutable target handoff.</p>
+            </div>
+          </div>
+          <div class="grid gap-6 border-t px-6 py-5 text-sm md:grid-cols-3 hairline">
+            <div><p class="tag mb-2 text-slate-500">Problem</p><p>Campaign module writes target groups through saved-group catalog interface; locality breaks when a campaign runs.</p></div>
+            <div><p class="tag mb-2 text-slate-500">Deepen</p><p>Campaign snapshot module owns target implementation; saved-group catalog module alone mutates saved-group storage.</p></div>
+            <div><p class="tag mb-2 text-slate-500">Wins</p><ul class="space-y-1 text-slate-700"><li>• locality: campaigns cannot alter saved groups</li><li>• leverage: one migration point</li><li>• interface exposes intent, not transport list</li><li>• tests hit one persistence seam</li></ul></div>
+          </div>
+        </article>
+
+        <article id="campaign-runner" class="overflow-hidden border bg-white shadow-sm hairline">
+          <div class="border-b px-6 py-5 hairline">
+            <div class="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p class="tag text-slate-500">Candidate 02</p>
+                <h2 class="mt-1 font-serif text-3xl font-semibold">Make campaign execution one durable runner module</h2>
+              </div>
+              <div class="flex gap-2">
+                <span class="tag rounded-full bg-emerald-100 px-3 py-2 text-emerald-800">Strong</span>
+                <span class="tag rounded-full bg-indigo-100 px-3 py-2 text-indigo-800">ports &amp; adapters</span>
+              </div>
+            </div>
+            <p class="mt-4 font-mono text-xs text-slate-600">src/background/orchestrator.ts · src/background/scheduler.ts · src/background/index.ts · src/sidepanel/store/campaignStore.ts · src/shared/messages.ts</p>
+          </div>
+          <div class="grid gap-5 p-6 lg:grid-cols-2">
+            <div class="diagram-paper border p-4 hairline">
+              <p class="tag mb-2 text-slate-500">Before / memory decides next post</p>
+              <pre class="mermaid">
+flowchart TD
+  P[Side-panel module] --> M[Message module]
+  M --> O[Campaign orchestrator module]
+  O --> F[volatile flags]
+  O --> T[setTimeout delay]
+  O --> A[keep-alive alarm]
+  A -. no continuation .-> O
+  O --> S[stored campaign]
+  classDef leak fill:#fff1ee,stroke:#bd4d3b,stroke-width:2px,color:#8f2f23;
+  class F,T,A leak
+              </pre>
+              <p class="mt-2 text-xs font-semibold leak">Pause, next index, timer, and execution ownership cross seams.</p>
+            </div>
+            <div class="diagram-paper terminal border p-4 hairline">
+              <p class="tag mb-4 text-slate-500">After / runner owns atomic transitions</p>
+              <div class="mx-auto max-w-xs space-y-0">
+                <div class="module-box deep">Campaign runner module<br /><span class="font-normal text-slate-300">run token · next pending target · result state</span></div>
+                <div class="connector mx-6 h-6"></div>
+                <div class="module-box seam">campaign persistence adapter<br /><span class="font-normal">durable state</span></div>
+                <div class="connector mx-6 h-6"></div>
+                <div class="grid grid-cols-2 gap-3">
+                  <div class="module-box seam">alarm adapter<br /><span class="font-normal">wake to continue</span></div>
+                  <div class="module-box seam">Facebook adapter<br /><span class="font-normal">one atomic post</span></div>
+                </div>
+              </div>
+              <p class="mt-4 text-xs font-semibold text-emerald-800">UI module sends intent; runner module owns all execution.</p>
+            </div>
+          </div>
+          <div class="grid gap-6 border-t px-6 py-5 text-sm md:grid-cols-3 hairline">
+            <div><p class="tag mb-2 text-slate-500">Problem</p><p>Current index stays at processed target; pause is volatile; the alarm adapter performs no continuation after worker suspension.</p></div>
+            <div><p class="tag mb-2 text-slate-500">Deepen</p><p>One runner module persists each transition and makes the alarm adapter and Facebook adapter real seams.</p></div>
+            <div><p class="tag mb-2 text-slate-500">Wins</p><ul class="space-y-1 text-slate-700"><li>• locality: pause rules live together</li><li>• leverage: one execution owner</li><li>• adapter tests replace timer races</li><li>• interface rejects stale run token</li></ul></div>
+          </div>
+        </article>
+
+        <article id="group-catalog" class="overflow-hidden border bg-white shadow-sm hairline">
+          <div class="border-b px-6 py-5 hairline">
+            <div class="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p class="tag text-slate-500">Candidate 03</p>
+                <h2 class="mt-1 font-serif text-3xl font-semibold">Deepen group intake into a Group catalog module</h2>
+              </div>
+              <div class="flex gap-2">
+                <span class="tag rounded-full bg-emerald-100 px-3 py-2 text-emerald-800">Strong</span>
+                <span class="tag rounded-full bg-slate-100 px-3 py-2 text-slate-600">local-substitutable</span>
+              </div>
+            </div>
+            <p class="mt-4 font-mono text-xs text-slate-600">src/shared/types.ts · src/shared/validators.ts · src/sidepanel/store/groupStore.ts · src/sidepanel/components/GroupManager/*</p>
+          </div>
+          <div class="grid gap-5 p-6 lg:grid-cols-2">
+            <div class="diagram-paper border p-4 hairline">
+              <p class="tag mb-2 text-slate-500">Before / wide interface, shallow implementation</p>
+              <div class="mass">
+                <div style="height: 150px"><small>interface</small>URLs only<br />manual split<br />URL dedupe</div>
+                <div style="height: 156px; background: #eef3f6"><small>implementation</small>add URLs<br />label side path<br />saved list writes</div>
+              </div>
+              <p class="mt-3 text-xs font-semibold leak">Name, raw ID, URL, CSV row, reason, and duplicate rule leak across UI modules.</p>
+            </div>
+            <div class="diagram-paper border p-4 hairline">
+              <p class="tag mb-2 text-slate-500">After / short interface, deep implementation</p>
+              <div class="grid h-[184px] grid-cols-[0.55fr_1fr_0.55fr] items-center gap-3">
+                <div class="space-y-3"><div class="module-box seam">manual entry</div><div class="module-box seam">file import</div></div>
+                <div class="module-box deep min-h-[160px] flex items-center">Group catalog module<br /><span class="mt-3 font-normal text-slate-300">group ID normalization<br />legacy migration<br />name fallback<br />duplicate and row reasons</span></div>
+                <div class="module-box seam">saved groups<br /><span class="font-normal">one write</span></div>
+              </div>
+              <p class="mt-3 text-xs font-semibold text-emerald-800">One group identity interface; ingestion details stay inside implementation.</p>
+            </div>
+          </div>
+          <div class="grid gap-6 border-t px-6 py-5 text-sm md:grid-cols-3 hairline">
+            <div><p class="tag mb-2 text-slate-500">Problem</p><p>Group interface uses URL and optional label, while requested ID/name import rules need distinct identity and validation.</p></div>
+            <div><p class="tag mb-2 text-slate-500">Deepen</p><p>Group catalog module absorbs URL parsing, raw-ID handling, CSV/TXT rows, legacy records, and ID dedupe.</p></div>
+            <div><p class="tag mb-2 text-slate-500">Wins</p><ul class="space-y-1 text-slate-700"><li>• locality: one duplicate rule</li><li>• leverage: manual and import share code</li><li>• interface returns row reasons</li><li>• two adapters justify seam</li></ul></div>
+          </div>
+        </article>
+
+        <article id="post-library" class="overflow-hidden border bg-white shadow-sm hairline">
+          <div class="border-b px-6 py-5 hairline">
+            <div class="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p class="tag text-slate-500">Candidate 04</p>
+                <h2 class="mt-1 font-serif text-3xl font-semibold">Split reusable posts from campaign composition</h2>
+              </div>
+              <div class="flex gap-2">
+                <span class="tag rounded-full bg-emerald-100 px-3 py-2 text-emerald-800">Strong</span>
+                <span class="tag rounded-full bg-slate-100 px-3 py-2 text-slate-600">in-process</span>
+              </div>
+            </div>
+            <p class="mt-4 font-mono text-xs text-slate-600">src/sidepanel/store/postStore.ts · src/sidepanel/components/PostComposer/* · src/sidepanel/components/CampaignDashboard/* · src/content-scripts/facebook/composer.ts</p>
+          </div>
+          <div class="grid gap-5 p-6 lg:grid-cols-2">
+            <div class="diagram-paper terminal border p-4 hairline">
+              <p class="tag mb-4 text-slate-500">Before / one draft does four jobs</p>
+              <div class="space-y-2">
+                <div class="module-box border hairline">Composer module — edits live text</div>
+                <div class="arrow text-center">↓</div>
+                <div class="module-box border hairline">blink_post_draft — single saved post</div>
+                <div class="arrow text-center">↓</div>
+                <div class="module-box border hairline">Campaign module — shallow copy</div>
+                <div class="arrow text-center">↓</div>
+                <div class="module-box border leak">Facebook adapter — CRLF leaks into text insertion</div>
+              </div>
+            </div>
+            <div class="diagram-paper terminal border p-4 hairline">
+              <p class="tag mb-4 text-slate-500">After / composition never mutates reusable post</p>
+              <div class="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+                <div class="space-y-4"><div class="module-box deep">Saved-post library module<br /><span class="font-normal text-slate-300">title · ordered collection · migration</span></div><div class="module-box seam">campaign draft module<br /><span class="font-normal">independent copy</span></div></div>
+                <div class="arrow">→</div>
+                <div class="module-box seam">Facebook adapter<br /><span class="font-normal">canonical line endings at seam</span></div>
+              </div>
+              <p class="mt-4 text-xs font-semibold text-emerald-800">Reusable post stays stable; campaign draft owns campaign edits.</p>
+            </div>
+          </div>
+          <div class="grid gap-6 border-t px-6 py-5 text-sm md:grid-cols-3 hairline">
+            <div><p class="tag mb-2 text-slate-500">Problem</p><p>One draft is both current composition and the only saved post; CRLF reaches Facebook insertion without canonical handling.</p></div>
+            <div><p class="tag mb-2 text-slate-500">Deepen</p><p>Saved-post library module owns reusable data; campaign draft module owns copy; Facebook adapter owns transport newline normalization.</p></div>
+            <div><p class="tag mb-2 text-slate-500">Wins</p><ul class="space-y-1 text-slate-700"><li>• locality: edits cannot overwrite library</li><li>• leverage: one idempotent migration</li><li>• interface preserves raw post text</li><li>• adapter test proves paragraphs</li></ul></div>
+          </div>
+        </article>
+
+        <article id="timing-policy" class="overflow-hidden border bg-white shadow-sm hairline">
+          <div class="border-b px-6 py-5 hairline">
+            <div class="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p class="tag text-slate-500">Candidate 05</p>
+                <h2 class="mt-1 font-serif text-3xl font-semibold">Put timing range rules behind one settings module</h2>
+              </div>
+              <div class="flex gap-2">
+                <span class="tag rounded-full bg-amber-100 px-3 py-2 text-amber-900">Worth exploring</span>
+                <span class="tag rounded-full bg-slate-100 px-3 py-2 text-slate-600">in-process</span>
+              </div>
+            </div>
+            <p class="mt-4 font-mono text-xs text-slate-600">src/shared/types.ts · src/sidepanel/components/Settings/Settings.tsx · src/sidepanel/store/settingsStore.ts · src/background/scheduler.ts</p>
+          </div>
+          <div class="grid gap-5 p-6 lg:grid-cols-2">
+            <div class="diagram-paper terminal border p-4 hairline">
+              <p class="tag mb-4 text-slate-500">Before / validation scattered</p>
+              <div class="grid grid-cols-3 items-center gap-2">
+                <div class="module-box border hairline">Settings UI<br /><span class="font-normal">parse input</span></div>
+                <div class="arrow">→</div>
+                <div class="module-box border hairline">settings store<br /><span class="font-normal">merge value</span></div>
+                <div class="module-box border hairline">scheduler<br /><span class="font-normal">range check</span></div>
+                <div class="warn-arrow">←</div>
+                <div class="module-box border leak">campaign snapshot<br /><span class="font-normal">old values</span></div>
+              </div>
+            </div>
+            <div class="diagram-paper terminal border p-4 hairline">
+              <p class="tag mb-4 text-slate-500">After / one safe 5-second rule</p>
+              <div class="mx-auto max-w-sm">
+                <div class="module-box deep">Timing policy module<br /><span class="font-normal text-slate-300">minimum · maximum · step · legacy normalization</span></div>
+                <div class="mt-4 grid grid-cols-2 gap-3"><div class="module-box seam">stepper UI adapter</div><div class="module-box seam">settings persistence adapter</div></div>
+                <div class="mt-4 module-box seam">campaign runner module reads validated snapshot</div>
+              </div>
+            </div>
+          </div>
+          <div class="grid gap-6 border-t px-6 py-5 text-sm md:grid-cols-3 hairline">
+            <div><p class="tag mb-2 text-slate-500">Problem</p><p>Existing min/max input coercion, storage, and scheduler range rules have separate implementations and no finite maximum.</p></div>
+            <div><p class="tag mb-2 text-slate-500">Deepen</p><p>Timing policy module owns 5-second stepping and legacy normalization; UI and storage become adapters.</p></div>
+            <div><p class="tag mb-2 text-slate-500">Wins</p><ul class="space-y-1 text-slate-700"><li>• locality: invalid values stop at one seam</li><li>• leverage: stepper shares rule</li><li>• interface supplies safe range</li><li>• tests avoid UI timing</li></ul></div>
+          </div>
+        </article>
+      </section>
+
+      <section id="top-recommendation" class="mt-10 border-4 p-6" style="border-color: var(--ink); background: #edf3f7">
+        <p class="tag text-slate-500">Top recommendation</p>
+        <div class="mt-2 flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <h2 class="font-serif text-3xl font-semibold">Separate campaign target snapshots first</h2>
+            <p class="mt-2 max-w-3xl text-sm">One real storage seam currently leaks campaign targets into saved groups. Deepening it restores locality immediately and gives the durable runner, group catalog, and saved-post work stable persistence to build on.</p>
+          </div>
+          <a href="#campaign-snapshot" class="tag border px-4 py-3 hover:bg-white" style="border-color: var(--blue)">See candidate 01 ↑</a>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>
