@@ -351,6 +351,24 @@ describe('message factories', () => {
     expect(isStartCampaign(msg)).toBe(true);
   });
 
+  it('createStartCampaignMessage snapshots unified launch choices', () => {
+    const launch = {
+      postSource: { kind: 'saved' as const, id: 'template-1', label: 'Weekly update' },
+      groupSource: { kind: 'saved' as const, id: 'collection-1', label: 'Marketing groups' },
+      randomizeGroupOrder: true,
+    };
+    const msg = createStartCampaignMessage(
+      mockDraft,
+      [{ url: 'https://facebook.com/groups/group-1' }],
+      mockSettings,
+      launch,
+    );
+
+    launch.groupSource.label = 'Changed later';
+    expect(msg.payload.launch?.groupSource.label).toBe('Marketing groups');
+    expect(isStartCampaign(msg)).toBe(true);
+  });
+
   it('createPauseCampaignMessage produces valid message', () => {
     const msg = createPauseCampaignMessage();
     expect(msg.type).toBe('PAUSE_CAMPAIGN');

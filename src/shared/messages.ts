@@ -13,8 +13,14 @@ import type {
   CampaignStatusResponse,
   CampaignHistoryEntry,
   CampaignHistoryResponse,
+  CampaignLaunchSnapshot,
 } from './types';
-import { cloneCampaignTargetGroups, isCampaignTargetGroups } from './campaignSnapshot';
+import {
+  cloneCampaignLaunch,
+  cloneCampaignTargetGroups,
+  isCampaignLaunch,
+  isCampaignTargetGroups,
+} from './campaignSnapshot';
 import { isValidDelayRange } from './timingPolicy';
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -47,7 +53,8 @@ function isCampaignSettingsPayload(value: unknown): boolean {
     typeof maxRetries === 'number' &&
     Number.isInteger(maxRetries) &&
     isValidDelayRange({ delayMinSeconds, delayMaxSeconds }) &&
-    maxRetries >= 0
+    maxRetries >= 0 &&
+    maxRetries <= 10
   );
 }
 
@@ -63,6 +70,7 @@ export function isStartCampaign(
   return (
     isPostDraftPayload(p.postDraft) &&
     isCampaignSettingsPayload(p.settings) &&
+    (p.launch === undefined || isCampaignLaunch(p.launch)) &&
     (isCampaignTargetGroups(p.targetGroups) || typeof p.groupListId === 'string')
   );
 }
@@ -166,10 +174,16 @@ export function createStartCampaignMessage(
   postDraft: PostDraft,
   targetGroups: GroupEntry[],
   settings: CampaignSettings,
+  launch?: CampaignLaunchSnapshot,
 ): { type: 'START_CAMPAIGN'; payload: ModernStartCampaignPayload } {
   return {
     type: 'START_CAMPAIGN',
-    payload: { postDraft, targetGroups: cloneCampaignTargetGroups(targetGroups), settings },
+    payload: {
+      postDraft,
+      targetGroups: cloneCampaignTargetGroups(targetGroups),
+      settings,
+      ...(launch ? { launch: cloneCampaignLaunch(launch) } : {}),
+    },
   };
 }
 
@@ -275,6 +289,8 @@ function isCampaignHistoryEntry(value: unknown): value is CampaignHistoryEntry {
     typeof value.totalGroups === 'number' &&
     Array.isArray(value.results) &&
     isObject(value.settings) &&
+    (value.targetGroups === undefined || isCampaignTargetGroups(value.targetGroups)) &&
+    (value.launch === undefined || isCampaignLaunch(value.launch)) &&
     typeof value.completedAt === 'number' &&
     (value.startedAt === undefined || typeof value.startedAt === 'number') &&
     (value.error === undefined || typeof value.error === 'string')
