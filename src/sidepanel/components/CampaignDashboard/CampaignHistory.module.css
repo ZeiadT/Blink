@@ -152,6 +152,30 @@
   color: var(--color-error);
 }
 
+.sources {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-2);
+  margin: 0;
+  background: var(--color-bg-elevated);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-xs);
+}
+
+.sources div {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr);
+  gap: var(--space-2);
+}
+
+.sources dt { color: var(--color-text-tertiary); }
+.sources dd {
+  margin: 0;
+  color: var(--color-text-secondary);
+  overflow-wrap: anywhere;
+}
+
 .error {
   padding: var(--space-2);
   background: var(--color-error-muted);

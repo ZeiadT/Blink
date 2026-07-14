@@ -1,8 +1,6 @@
 import React, { useState } from 'react';
-import { CheckCircle, XCircle, SkipForward, ChevronDown, ChevronUp, RefreshCw } from 'lucide-react';
+import { CheckCircle, XCircle, SkipForward, ChevronDown, ChevronUp } from 'lucide-react';
 import { truncate } from '@shared/utils';
-import { showToast } from '../shared/Toast';
-import { Button } from '../shared/Button';
 import type { Campaign, PostResult } from '@shared/types';
 import styles from './ResultsSummary.module.css';
 
@@ -75,10 +73,6 @@ export const ResultsSummary: React.FC<ResultsSummaryProps> = ({ campaign }) => {
     status === 'failed' ? styles.bannerFailed :
     styles.bannerCancelled;
 
-  const handleRetry = () => {
-    showToast('info', `Retry for ${failedCount} failed group(s) — coming soon`);
-  };
-
   return (
     <div className={styles.summary}>
       {/* Banner */}
@@ -96,6 +90,14 @@ export const ResultsSummary: React.FC<ResultsSummaryProps> = ({ campaign }) => {
           {campaign.historyError}
         </div>
       )}
+
+      {campaign.launch ? (
+        <div className={styles.launchContext}>
+          <span><strong>Post</strong>{campaign.launch.postSource.label}</span>
+          <span><strong>Targets</strong>{campaign.launch.groupSource.label}</span>
+          <span><strong>Order</strong>{campaign.launch.randomizeGroupOrder ? 'Randomized once' : 'Collection order'}</span>
+        </div>
+      ) : null}
 
       {/* Stats */}
       <div className={styles.stats}>
@@ -117,7 +119,7 @@ export const ResultsSummary: React.FC<ResultsSummaryProps> = ({ campaign }) => {
       <div className={styles.list}>
         {results.map((r, i) => (
           <ResultRow
-            key={i}
+            key={`${r.groupUrl}-${r.timestamp}-${i}`}
             result={r}
             isExpanded={expandedIdx === i}
             onToggle={() => setExpandedIdx(expandedIdx === i ? null : i)}
@@ -125,12 +127,6 @@ export const ResultsSummary: React.FC<ResultsSummaryProps> = ({ campaign }) => {
         ))}
       </div>
 
-      {/* Retry Button */}
-      {failedCount > 0 && (
-        <Button variant="secondary" size="sm" icon={RefreshCw} onClick={handleRetry}>
-          Retry Failed ({failedCount})
-        </Button>
-      )}
     </div>
   );
 };

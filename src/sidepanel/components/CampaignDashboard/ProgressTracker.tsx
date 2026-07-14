@@ -55,18 +55,22 @@ export const ProgressTracker: React.FC<ProgressTrackerProps> = ({ campaign, prog
 
       {/* Step Dots */}
       {totalGroups > 0 && (
-        <div className={styles.steps}>
+        <div className={styles.steps} role="list" aria-label="Group posting status">
           {results.map((r, i) => (
             <div
               key={i}
               className={`${styles.dot} ${styles[`dot_${r.status}`]}`}
               title={`${r.groupUrl}: ${r.status}`}
+              role="listitem"
+              aria-label={`Group ${i + 1}: ${r.status}`}
             />
           ))}
           {Array.from({ length: remaining }).map((_, i) => (
             <div
               key={`p-${i}`}
               className={`${styles.dot} ${i === 0 && status === 'running' ? styles.dot_current : styles.dot_pending}`}
+              role="listitem"
+              aria-label={`Group ${completed + i + 1}: ${i === 0 && status === 'running' ? 'current' : 'pending'}`}
             />
           ))}
         </div>

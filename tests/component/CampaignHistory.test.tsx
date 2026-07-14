@@ -22,6 +22,15 @@ const history: CampaignHistoryEntry[] = [
       },
     ],
     settings: { delayMinSeconds: 5, delayMaxSeconds: 10, maxRetries: 1 },
+    targetGroups: [
+      { url: 'https://facebook.com/groups/success', name: 'Success group' },
+      { url: 'https://facebook.com/groups/failure', name: 'Failure group' },
+    ],
+    launch: {
+      postSource: { kind: 'saved', id: 'template-1', label: 'Weekly update' },
+      groupSource: { kind: 'saved', id: 'collection-1', label: 'Marketing groups' },
+      randomizeGroupOrder: true,
+    },
     completedAt: 3,
   },
 ];
@@ -44,6 +53,10 @@ describe('CampaignHistory', () => {
     expect(row).toHaveAttribute('aria-expanded', 'true');
     expect(screen.getAllByText(/قائمة عربية 😀/)).toHaveLength(2);
     expect(screen.getByText('Facebook composer did not load.')).toBeInTheDocument();
+    expect(screen.getByText('Weekly update')).toBeInTheDocument();
+    expect(screen.getByText('Marketing groups')).toBeInTheDocument();
+    expect(screen.getByText('Randomized once')).toBeInTheDocument();
+    expect(screen.getByText('Failure group')).toBeInTheDocument();
     expect(screen.getByText(/Delay 5–10s/)).toBeInTheDocument();
   });
 

@@ -80,12 +80,19 @@ const HistoryRow: React.FC<{ entry: CampaignHistoryEntry }> = ({ entry }) => {
           <p className={styles.settings}>
             Delay {entry.settings.delayMinSeconds}–{entry.settings.delayMaxSeconds}s · {entry.settings.maxRetries} retries
           </p>
+          {entry.launch ? (
+            <dl className={styles.sources}>
+              <div><dt>Post</dt><dd>{entry.launch.postSource.label}</dd></div>
+              <div><dt>Targets</dt><dd>{entry.launch.groupSource.label}</dd></div>
+              <div><dt>Order</dt><dd>{entry.launch.randomizeGroupOrder ? 'Randomized once' : 'Collection order'}</dd></div>
+            </dl>
+          ) : null}
           {entry.error ? <p className={styles.error} role="alert">{entry.error}</p> : null}
           <ul className={styles.results} aria-label="Campaign results">
             {entry.results.map((result, index) => (
               <li key={`${result.groupUrl}-${result.timestamp}-${index}`}>
-                <span>{result.status}</span>
-                <span>{result.groupUrl}</span>
+                <span>{index + 1}. {result.status}</span>
+                <span>{entry.targetGroups?.[index]?.name ?? entry.targetGroups?.[index]?.label ?? result.groupUrl}</span>
                 {result.error ? <span className={styles.resultError}>{result.error}</span> : null}
               </li>
             ))}
