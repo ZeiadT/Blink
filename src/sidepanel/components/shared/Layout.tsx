@@ -1,5 +1,5 @@
 import React from 'react';
-import { PenSquare, Users, Rocket, Settings } from 'lucide-react';
+import { PenSquare, Users, Rocket } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { TabId } from '@shared/types';
 import styles from './Layout.module.css';
@@ -8,14 +8,12 @@ const TAB_ICONS: Record<TabId, LucideIcon> = {
   compose: PenSquare,
   groups: Users,
   campaign: Rocket,
-  settings: Settings,
 };
 
 const TAB_LABELS: Record<TabId, string> = {
   compose: 'Compose',
   groups: 'Groups',
   campaign: 'Campaign',
-  settings: 'Settings',
 };
 
 interface LayoutProps {
@@ -26,7 +24,7 @@ interface LayoutProps {
   children: React.ReactNode;
 }
 
-const TAB_ORDER: TabId[] = ['compose', 'groups', 'campaign', 'settings'];
+const TAB_ORDER: TabId[] = ['compose', 'groups', 'campaign'];
 
 export const Layout: React.FC<LayoutProps> = ({
   activeTab,

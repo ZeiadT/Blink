@@ -6,6 +6,25 @@
   animation: fadeInUp var(--transition-slow) ease forwards;
 }
 
+.embedded {
+  gap: var(--space-3);
+  padding: 0;
+  animation: none;
+}
+
+.embedded .section {
+  padding: 0;
+  background: transparent;
+  border: 0;
+  backdrop-filter: none;
+}
+
+.embedded .section + .section {
+  padding-top: var(--space-3);
+  border-top: var(--border-width) solid var(--color-glass-border);
+  border-radius: 0;
+}
+
 .section {
   display: flex;
   flex-direction: column;
