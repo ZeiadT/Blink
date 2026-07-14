@@ -47,11 +47,11 @@ export function hasPostContent(post: Pick<PostDraft, 'text' | 'mediaFiles'>): bo
 
 export function validateSavedPostInput(input: SavedPostInput): string | null {
   const title = input.title.trim();
-  if (!title) return 'Saved post needs a title.';
+  if (!title) return 'Post template needs a name.';
   if (title.length > SAVED_POST_CONSTRAINTS.MAX_TITLE_LENGTH) {
     return `Title must be ${SAVED_POST_CONSTRAINTS.MAX_TITLE_LENGTH} characters or fewer.`;
   }
-  if (!hasPostContent(input)) return 'Saved post needs text or at least one media file.';
+  if (!hasPostContent(input)) return 'Post template needs text or at least one media file.';
   return null;
 }
 
