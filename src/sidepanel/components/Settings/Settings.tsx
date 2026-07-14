@@ -242,11 +242,19 @@ const SettingsSavingIndicator: React.FC = () => {
   );
 };
 
-export const Settings: React.FC = () => (
-  <div className={styles.settings} data-testid="settings-shell">
+interface SettingsProps {
+  showAbout?: boolean;
+  embedded?: boolean;
+}
+
+export const Settings: React.FC<SettingsProps> = ({ showAbout = true, embedded = false }) => (
+  <div
+    className={`${styles.settings} ${embedded ? styles.embedded : ''}`}
+    data-testid="settings-shell"
+  >
     <TimingSection />
     <RetryPolicySection />
-    <AboutSection />
+    {showAbout ? <AboutSection /> : null}
     <SettingsFooter />
     <SettingsSavingIndicator />
   </div>

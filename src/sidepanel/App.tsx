@@ -3,7 +3,6 @@ import { Layout } from './components/shared/Layout';
 import { PostComposer } from './components/PostComposer/PostComposer';
 import { GroupManager } from './components/GroupManager/GroupManager';
 import { CampaignDashboard } from './components/CampaignDashboard/CampaignDashboard';
-import { Settings } from './components/Settings/Settings';
 import { ToastContainer } from './components/shared/Toast';
 import { useGroupStore } from './store/groupStore';
 import { useCampaignStore } from './store/campaignStore';
@@ -14,7 +13,6 @@ const TAB_CONTENT: Record<TabId, React.FC> = {
   compose: PostComposer,
   groups: GroupManager,
   campaign: CampaignDashboard,
-  settings: Settings,
 };
 
 export const App: React.FC = () => {
