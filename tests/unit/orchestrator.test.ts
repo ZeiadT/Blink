@@ -1,6 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { CampaignOrchestrator } from '@background/orchestrator';
-import type { PostDraft, CampaignSettings, GroupEntry, GroupList } from '@shared/types';
+import type {
+  CampaignLaunchSnapshot,
+  PostDraft,
+  CampaignSettings,
+  GroupEntry,
+  GroupList,
+} from '@shared/types';
 import { STORAGE_KEYS } from '@shared/constants';
 
 // ── Fixtures ───────────────────────────────────────────────────────────────
@@ -207,6 +213,31 @@ describe('CampaignOrchestrator', () => {
       });
     });
 
+    it('shuffles once and persists launch labels without mutating source order', async () => {
+      const random = vi.spyOn(Math, 'random').mockReturnValue(0);
+      const groups = mockGroupList.groups.map((group) => ({ ...group }));
+      const launch: CampaignLaunchSnapshot = {
+        postSource: { kind: 'saved', id: 'template-1', label: 'Launch update' },
+        groupSource: { kind: 'saved', id: 'list-1', label: 'Launch groups' },
+        randomizeGroupOrder: true,
+      };
+      const orch = new CampaignOrchestrator();
+      const startPromise = orch.start(mockDraft, groups, mockSettings, launch);
+
+      launch.groupSource.label = 'Changed later';
+      await vi.runAllTimersAsync();
+      await startPromise;
+
+      expect(orch.currentCampaign?.targetGroups.map((group) => group.url)).toEqual([
+        mockGroupList.groups[1].url,
+        mockGroupList.groups[2].url,
+        mockGroupList.groups[0].url,
+      ]);
+      expect(groups).toEqual(mockGroupList.groups);
+      expect(orch.currentCampaign?.launch?.groupSource.label).toBe('Launch groups');
+      random.mockRestore();
+    });
+
     it('persists campaign state to storage', async () => {
       const orch = new CampaignOrchestrator();
       const promise = orch.start(mockDraft, 'list-1', mockSettings);
@@ -377,6 +408,45 @@ describe('CampaignOrchestrator', () => {
       // Each attempt calls sendMessage once
       expect(chrome.tabs.sendMessage).toHaveBeenCalledTimes(3);
       expect(orch.status).toBe('failed'); // all groups failed → campaign failed
+    });
+
+    it('does not retry permanent group errors and continues with remaining groups', async () => {
+      let callCount = 0;
+      vi.mocked(chrome.tabs.sendMessage).mockImplementation((async () => {
+        callCount++;
+        return {
+          type: 'POST_RESULT',
+          payload:
+            callCount === 1
+              ? {
+                  groupUrl: '',
+                  status: 'failed',
+                  error: 'Posting permission unavailable',
+                  retryable: false,
+                  timestamp: Date.now(),
+                }
+              : { groupUrl: '', status: 'success', timestamp: Date.now() },
+        };
+      }) as never);
+      setupStorageMock([{
+        ...mockGroupList,
+        groups: [
+          { url: 'https://www.facebook.com/groups/blocked' },
+          { url: 'https://www.facebook.com/groups/available' },
+        ],
+      }]);
+
+      const orch = new CampaignOrchestrator();
+      const run = orch.start(mockDraft, 'list-1', { ...mockSettings, maxRetries: 3 });
+      await vi.runAllTimersAsync();
+      await run;
+
+      expect(chrome.tabs.sendMessage).toHaveBeenCalledTimes(2);
+      expect(orch.currentCampaign?.results).toEqual([
+        expect.objectContaining({ status: 'failed', retryable: false }),
+        expect.objectContaining({ status: 'success' }),
+      ]);
+      expect(orch.status).toBe('completed-with-issues');
     });
 
     it('campaign status is failed when all groups fail', async () => {
