@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Blink — Multi-Group Poster",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Compose once, post to many Facebook groups automatically.",
   "permissions": [
     "storage",
