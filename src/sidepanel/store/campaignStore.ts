@@ -6,6 +6,7 @@ import type {
   PopupMessage,
   PostDraft,
   CampaignHistoryEntry,
+  CampaignLaunchSnapshot,
 } from '@shared/types';
 import {
   createCancelCampaignMessage,
@@ -31,7 +32,12 @@ interface CampaignState {
   pendingAction: CampaignAction;
   actionError: string | null;
   historyError: string | null;
-  startCampaign: (postDraft: PostDraft, groups: GroupEntry[], settings: CampaignSettings) => Promise<void>;
+  startCampaign: (
+    postDraft: PostDraft,
+    groups: GroupEntry[],
+    settings: CampaignSettings,
+    launch?: CampaignLaunchSnapshot,
+  ) => Promise<void>;
   pauseCampaign: () => Promise<void>;
   resumeCampaign: () => Promise<void>;
   cancelCampaign: () => Promise<void>;
@@ -50,10 +56,10 @@ export const useCampaignStore = create<CampaignState>((set) => ({
   actionError: null,
   historyError: null,
 
-  startCampaign: async (postDraft, groups, settings) => {
+  startCampaign: async (postDraft, groups, settings, launch) => {
     await sendCampaignCommand(
       'start',
-      createStartCampaignMessage(postDraft, groups, settings),
+      createStartCampaignMessage(postDraft, groups, settings, launch),
       set,
     );
   },

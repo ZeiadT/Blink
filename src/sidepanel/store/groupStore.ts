@@ -167,7 +167,10 @@ export const useGroupStore = create<GroupState>((set, get) => {
 
     saveList: async (name) => {
       const trimmed = name.trim();
-      if (!trimmed) return { ok: false, error: 'Enter a name for this saved list.' };
+      if (!trimmed) return { ok: false, error: 'Enter a name for this group collection.' };
+      if (get().activeGroups.length === 0) {
+        return { ok: false, error: 'Add at least one group before saving a collection.' };
+      }
       const activeGroups = get().activeGroups;
       const now = Date.now();
       const list: GroupList = {
@@ -182,7 +185,7 @@ export const useGroupStore = create<GroupState>((set, get) => {
 
     loadList: async (listId) => {
       const list = get().savedLists.find((candidate) => candidate.id === listId);
-      if (!list) return { ok: false, error: 'Saved list no longer exists.' };
+      if (!list) return { ok: false, error: 'Group collection no longer exists.' };
       return commitCatalog(
         cloneCatalogGroups(list.groups as CatalogGroupEntry[]),
         get().savedLists,
@@ -192,7 +195,7 @@ export const useGroupStore = create<GroupState>((set, get) => {
     deleteList: async (listId) => {
       const savedLists = get().savedLists;
       if (!savedLists.some((list) => list.id === listId)) {
-        return { ok: false, error: 'Saved list no longer exists.' };
+        return { ok: false, error: 'Group collection no longer exists.' };
       }
       return commitCatalog(
         get().activeGroups,
@@ -202,10 +205,10 @@ export const useGroupStore = create<GroupState>((set, get) => {
 
     renameList: async (listId, name) => {
       const trimmed = name.trim();
-      if (!trimmed) return { ok: false, error: 'List name cannot be blank.' };
+      if (!trimmed) return { ok: false, error: 'Collection name cannot be blank.' };
       const savedLists = get().savedLists;
       if (!savedLists.some((list) => list.id === listId)) {
-        return { ok: false, error: 'Saved list no longer exists.' };
+        return { ok: false, error: 'Group collection no longer exists.' };
       }
       return commitCatalog(
         get().activeGroups,

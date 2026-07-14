@@ -1,7 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useCampaignStore } from '@sidepanel/store/campaignStore';
 import { isDismissCampaign, isStartCampaign } from '@shared/messages';
-import type { Campaign, CampaignHistoryEntry, CampaignSettings, GroupEntry, PostDraft } from '@shared/types';
+import type {
+  Campaign,
+  CampaignHistoryEntry,
+  CampaignLaunchSnapshot,
+  CampaignSettings,
+  GroupEntry,
+  PostDraft,
+} from '@shared/types';
 
 const postDraft: PostDraft = {
   id: 'post-1',
@@ -38,8 +45,13 @@ describe('campaignStore', () => {
     const activeGroups: GroupEntry[] = [
       { url: 'https://facebook.com/groups/campaign-target', label: 'Campaign target' },
     ];
+    const launch: CampaignLaunchSnapshot = {
+      postSource: { kind: 'current', label: 'Current post draft' },
+      groupSource: { kind: 'current', label: 'Current working groups' },
+      randomizeGroupOrder: false,
+    };
 
-    await useCampaignStore.getState().startCampaign(postDraft, activeGroups, settings);
+    await useCampaignStore.getState().startCampaign(postDraft, activeGroups, settings, launch);
 
     const message = vi.mocked(chrome.runtime.sendMessage).mock.calls.at(-1)?.[0];
     expect(isStartCampaign(message)).toBe(true);
@@ -49,9 +61,11 @@ describe('campaignStore', () => {
     }
 
     activeGroups[0].label = 'Mutated after start';
+    launch.groupSource.label = 'Mutated launch';
     expect(message.payload.targetGroups).toEqual([
       { url: 'https://facebook.com/groups/campaign-target', label: 'Campaign target' },
     ]);
+    expect(message.payload.launch?.groupSource.label).toBe('Current working groups');
     expect(chrome.storage.local.set).not.toHaveBeenCalled();
   });
 
