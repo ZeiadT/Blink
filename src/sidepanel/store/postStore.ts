@@ -93,7 +93,7 @@ export const usePostStore = create<PostState>((set, get) => {
       set({ savedPosts: sortSavedPosts(savedPosts), error: null });
       return { ok: true };
     } catch (error) {
-      const message = storageError('save saved posts', error);
+      const message = storageError('save post templates', error);
       set({ error: message });
       return { ok: false, error: message };
     }
@@ -175,7 +175,7 @@ export const usePostStore = create<PostState>((set, get) => {
       } catch (error) {
         set({
           isLoaded: true,
-          error: storageError('load saved posts', error),
+          error: storageError('load post templates', error),
         });
       }
     },
@@ -203,7 +203,7 @@ export const usePostStore = create<PostState>((set, get) => {
       const validation = validateSavedPostInput(input);
       if (validation) return { ok: false, error: validation };
       const existing = get().savedPosts.find((post) => post.id === id);
-      if (!existing) return { ok: false, error: 'Saved post no longer exists.' };
+      if (!existing) return { ok: false, error: 'Post template no longer exists.' };
       const now = Date.now();
       const savedPosts = get().savedPosts.map((post) =>
         post.id === id
@@ -221,7 +221,7 @@ export const usePostStore = create<PostState>((set, get) => {
 
     duplicateSavedPost: async (id) => {
       const source = get().savedPosts.find((post) => post.id === id);
-      if (!source) return { ok: false, error: 'Saved post no longer exists.' };
+      if (!source) return { ok: false, error: 'Post template no longer exists.' };
       const now = Date.now();
       const title = `Copy of ${source.title}`.slice(0, SAVED_POST_CONSTRAINTS.MAX_TITLE_LENGTH);
       return savePosts([
@@ -239,14 +239,14 @@ export const usePostStore = create<PostState>((set, get) => {
 
     deleteSavedPost: async (id) => {
       if (!get().savedPosts.some((post) => post.id === id)) {
-        return { ok: false, error: 'Saved post no longer exists.' };
+        return { ok: false, error: 'Post template no longer exists.' };
       }
       return savePosts(get().savedPosts.filter((post) => post.id !== id));
     },
 
     loadSavedPost: async (id) => {
       const post = get().savedPosts.find((savedPost) => savedPost.id === id);
-      if (!post) return { ok: false, error: 'Saved post no longer exists.' };
+      if (!post) return { ok: false, error: 'Post template no longer exists.' };
       const draft = createCampaignDraftFromSavedPost(post, generateId(), Date.now());
       set({ draft, isDirty: false, error: null });
       await persistDraft(draft);
