@@ -79,6 +79,8 @@ export interface PostResult {
   groupUrl: string;
   status: 'success' | 'failed' | 'skipped';
   error?: string;
+  /** False means retrying cannot recover this group-level failure. */
+  retryable?: boolean;
   timestamp: number;
 }
 
@@ -86,6 +88,19 @@ export interface CampaignSettings {
   delayMinSeconds: number;
   delayMaxSeconds: number;
   maxRetries: number;
+}
+
+export interface CampaignSourceSnapshot {
+  kind: 'current' | 'saved';
+  id?: string;
+  label: string;
+}
+
+/** Human-readable launch choices captured independently from mutable libraries. */
+export interface CampaignLaunchSnapshot {
+  postSource: CampaignSourceSnapshot;
+  groupSource: CampaignSourceSnapshot;
+  randomizeGroupOrder: boolean;
 }
 
 /**
@@ -131,6 +146,8 @@ export interface Campaign {
   startedAt?: number;
   completedAt?: number;
   settings: CampaignSettings;
+  /** Optional only for campaigns persisted before unified setup shipped. */
+  launch?: CampaignLaunchSnapshot;
 }
 
 /** Single background-to-side-panel response shape for campaign reads/commands. */
@@ -149,6 +166,10 @@ export interface CampaignHistoryEntry {
   totalGroups: number;
   results: PostResult[];
   settings: CampaignSettings;
+  /** Final execution order. Optional only for legacy history records. */
+  targetGroups?: GroupEntry[];
+  /** Launch labels survive later source rename or deletion. */
+  launch?: CampaignLaunchSnapshot;
   startedAt?: number;
   completedAt: number;
   error?: string;
@@ -165,6 +186,7 @@ export type ModernStartCampaignPayload = {
   postDraft: PostDraft;
   targetGroups: GroupEntry[];
   settings: CampaignSettings;
+  launch?: CampaignLaunchSnapshot;
 };
 
 export type LegacyStartCampaignPayload = {
@@ -209,4 +231,4 @@ export interface PlatformAdapter {
 }
 
 // ── Tab Navigation ──
-export type TabId = 'compose' | 'groups' | 'campaign' | 'settings';
+export type TabId = 'compose' | 'groups' | 'campaign';

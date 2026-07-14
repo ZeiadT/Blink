@@ -56,5 +56,4 @@ export const TABS: { id: TabId; label: string; iconName: string }[] = [
   { id: 'compose', label: 'Compose', iconName: 'PenSquare' },
   { id: 'groups', label: 'Groups', iconName: 'Users' },
   { id: 'campaign', label: 'Campaign', iconName: 'Rocket' },
-  { id: 'settings', label: 'Settings', iconName: 'Settings' },
 ];
