@@ -112,6 +112,6 @@ describe('saved post boundaries', () => {
     const input = { title: '  Weekly update  ', text: '  Keep\n\nspaces  ', mediaFiles: [] };
     expect(validateSavedPostInput(input)).toBeNull();
     expect(input.text).toBe('  Keep\n\nspaces  ');
-    expect(validateSavedPostInput({ ...input, title: '   ' })).toBe('Saved post needs a title.');
+    expect(validateSavedPostInput({ ...input, title: '   ' })).toBe('Post template needs a name.');
   });
 });

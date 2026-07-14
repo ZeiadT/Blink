@@ -238,7 +238,7 @@ function migrateLists(
 ): { lists: GroupList[]; changed: boolean } {
   if (value === undefined) return { lists: [], changed: false };
   if (!Array.isArray(value)) {
-    errors.push(catalogError('malformed_saved_list', 'Stored saved lists are not a list.'));
+    errors.push(catalogError('malformed_saved_list', 'Stored group collections are not a list.'));
     return { lists: [], changed: false };
   }
 
@@ -252,7 +252,7 @@ function migrateLists(
       !Array.isArray(raw.groups)
     ) {
       errors.push(
-        catalogError('malformed_saved_list', `Saved list ${listIndex + 1} is malformed.`),
+        catalogError('malformed_saved_list', `Group collection ${listIndex + 1} is malformed.`),
       );
       return;
     }
@@ -262,7 +262,7 @@ function migrateLists(
     for (let errorIndex = initialErrorCount; errorIndex < errors.length; errorIndex++) {
       errors[errorIndex] = {
         ...errors[errorIndex],
-        message: `Saved list ${listIndex + 1}: ${errors[errorIndex].message}`,
+        message: `Group collection ${listIndex + 1}: ${errors[errorIndex].message}`,
       };
     }
     changed ||= migrated.changed;
