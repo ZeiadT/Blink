@@ -83,15 +83,15 @@ describe('PostComposer', () => {
     expect(screen.getByText(/automated posting/i)).toBeInTheDocument();
   });
 
-  it('should create a reusable saved post without changing campaign text', async () => {
+  it('should create a post template without changing campaign text', async () => {
     const user = userEvent.setup();
     usePostStore.setState((state) => ({
       draft: { ...state.draft, text: 'Campaign copy\n\nwith paragraphs' },
     }));
     render(<PostComposer />);
 
-    await user.click(screen.getByRole('button', { name: /save as reusable/i }));
-    await user.type(screen.getByLabelText('Saved post title'), 'Weekly update');
+    await user.click(screen.getByRole('button', { name: /save as template/i }));
+    await user.type(screen.getByLabelText('Post template name'), 'Weekly update');
     await user.click(screen.getByRole('button', { name: 'Save changes' }));
 
     await waitFor(() => {
@@ -104,7 +104,7 @@ describe('PostComposer', () => {
     expect(usePostStore.getState().draft.text).toBe('Campaign copy\n\nwith paragraphs');
   });
 
-  it('should confirm before replacing changed campaign draft with saved post copy', async () => {
+  it('should confirm before replacing changed campaign draft with template copy', async () => {
     const user = userEvent.setup();
     usePostStore.setState((state) => ({
       draft: { ...state.draft, text: 'Campaign-only edit' },
@@ -145,7 +145,7 @@ describe('PostComposer', () => {
     });
     render(<PostComposer />);
 
-    const list = screen.getByRole('region', { name: 'Saved post list' });
+    const list = screen.getByRole('region', { name: 'Post template list' });
     expect(screen.getAllByRole('button', { name: 'Use' })[0]).toBeEnabled();
 
     Object.defineProperty(list, 'scrollTop', { value: 250, writable: true });
@@ -155,6 +155,6 @@ describe('PostComposer', () => {
     const lastEdit = screen.getByRole('button', { name: 'Edit Saved post 4' });
     expect(lastEdit).toBeEnabled();
     await user.click(lastEdit);
-    expect(screen.getByText('Edit reusable post')).toBeInTheDocument();
+    expect(screen.getByText('Edit post template')).toBeInTheDocument();
   });
 });
