@@ -62,13 +62,13 @@ export const SavedPostLibrary: React.FC = () => {
 
   const handleDuplicate = useCallback(async (post: SavedPost) => {
     const result = await usePostStore.getState().duplicateSavedPost(post.id);
-    showToast(result.ok ? 'success' : 'error', result.ok ? 'Saved post duplicated.' : result.error);
+    showToast(result.ok ? 'success' : 'error', result.ok ? 'Post template duplicated.' : result.error);
   }, []);
 
   const handleDelete = useCallback(async (post: SavedPost) => {
     const result = await usePostStore.getState().deleteSavedPost(post.id);
     if (result.ok) {
-      showToast('info', 'Saved post deleted. Current campaign draft was kept.');
+      showToast('info', 'Post template deleted. Current campaign draft was kept.');
       setPendingDelete(null);
     } else {
       showToast('error', result.error);
@@ -77,13 +77,13 @@ export const SavedPostLibrary: React.FC = () => {
 
   const handleSave = useCallback(
     async (input: SavedPostInput): Promise<PostStoreResult> => {
-      if (!editor) return { ok: false, error: 'Saved post editor is closed.' };
+      if (!editor) return { ok: false, error: 'Post template editor is closed.' };
       const result =
         editor.mode === 'create'
           ? await usePostStore.getState().createSavedPost(input)
           : await usePostStore.getState().updateSavedPost(editor.post.id, input);
       if (result.ok) {
-        showToast('success', editor.mode === 'create' ? 'Saved post created.' : 'Saved post updated.');
+        showToast('success', editor.mode === 'create' ? 'Post template created.' : 'Post template updated.');
         setEditor(null);
       }
       return result;
@@ -92,14 +92,14 @@ export const SavedPostLibrary: React.FC = () => {
   );
 
   return (
-    <section className={styles.library} aria-label="Saved posts">
+    <section className={styles.library} aria-label="Post templates">
       <div className={styles.header}>
         <div>
-          <span className={styles.eyebrow}>Reusable posts</span>
-          <p className={styles.description}>Load a copy. Campaign edits stay separate.</p>
+          <span className={styles.eyebrow}>Post templates</span>
+          <p className={styles.description}>Reuse a copy without changing the saved template.</p>
         </div>
         <Button variant="secondary" size="sm" icon={FilePlus2} onClick={openCreate}>
-          Save as reusable
+          Save as template
         </Button>
       </div>
 
@@ -107,15 +107,15 @@ export const SavedPostLibrary: React.FC = () => {
         <div className={styles.empty}>
           <Files size={24} aria-hidden="true" />
           <div>
-            <strong>No saved posts</strong>
-            <p>Save current campaign draft for reuse across future campaigns.</p>
+            <strong>No post templates</strong>
+            <p>Save current campaign draft for reuse in future campaigns.</p>
           </div>
           <Button variant="ghost" size="sm" onClick={openCreate}>
-            Create first post
+            Create first template
           </Button>
         </div>
       ) : (
-        <div className={styles.list} role="region" aria-label="Saved post list" tabIndex={0}>
+        <div className={styles.list} role="region" aria-label="Post template list" tabIndex={0}>
           {savedPosts.map((post) => (
             <SavedPostCard
               key={post.id}
@@ -133,7 +133,7 @@ export const SavedPostLibrary: React.FC = () => {
       {editor && (
         <SavedPostEditorModal
           key={editor.mode === 'create' ? 'new' : editor.post.id}
-          title={editor.mode === 'create' ? 'Save reusable post' : 'Edit reusable post'}
+          title={editor.mode === 'create' ? 'Save post template' : 'Edit post template'}
           initial={editor.mode === 'create' ? editor.input : editor.post}
           onClose={() => setEditor(null)}
           onSave={handleSave}
@@ -145,7 +145,7 @@ export const SavedPostLibrary: React.FC = () => {
           <div className={styles.confirmation}>
             <p>
               Current campaign text and media will be replaced with a copy of “{pendingUse.title}”.
-              Reusable post will not change.
+              Post template will not change.
             </p>
             <div className={styles.confirmActions}>
               <Button variant="ghost" size="sm" onClick={() => setPendingUse(null)}>Keep current</Button>
@@ -165,13 +165,13 @@ export const SavedPostLibrary: React.FC = () => {
       )}
 
       {pendingDelete && (
-        <Modal isOpen onClose={() => setPendingDelete(null)} title="Delete saved post?">
+        <Modal isOpen onClose={() => setPendingDelete(null)} title="Delete post template?">
           <div className={styles.confirmation}>
             <p>Delete “{pendingDelete.title}”? This cannot be undone.</p>
             <div className={styles.confirmActions}>
               <Button variant="ghost" size="sm" onClick={() => setPendingDelete(null)}>Cancel</Button>
               <Button variant="danger" size="sm" onClick={() => void handleDelete(pendingDelete)}>
-                Delete post
+                Delete template
               </Button>
             </div>
           </div>
@@ -255,23 +255,23 @@ const SavedPostEditorModal: React.FC<SavedPostEditorModalProps> = ({ title, init
     <Modal isOpen onClose={onClose} title={title}>
       <div className={styles.editor}>
         <label className={styles.field}>
-          <span>Post title</span>
+          <span>Template name</span>
           <input
             value={postTitle}
             onChange={(event) => setPostTitle(event.target.value)}
             maxLength={SAVED_POST_CONSTRAINTS.MAX_TITLE_LENGTH}
             placeholder="e.g. Friday product update"
-            aria-label="Saved post title"
+            aria-label="Post template name"
             autoFocus
           />
         </label>
         <label className={styles.field}>
-          <span>Post content</span>
+          <span>Template content</span>
           <textarea
             value={text}
             onChange={(event) => setText(event.target.value)}
-            placeholder="Write reusable post content"
-            aria-label="Saved post content"
+            placeholder="Write post template content"
+            aria-label="Post template content"
             rows={6}
           />
         </label>
@@ -279,7 +279,7 @@ const SavedPostEditorModal: React.FC<SavedPostEditorModalProps> = ({ title, init
           mediaFiles={mediaFiles}
           onAdd={(file) => setMediaFiles((current) => [...current, file])}
           onRemove={(fileId) => setMediaFiles((current) => current.filter((file) => file.id !== fileId))}
-          label="Upload reusable post media"
+          label="Upload post template media"
         />
         {error && <p className={styles.editorError} role="alert">{error}</p>}
         <div className={styles.editorActions}>

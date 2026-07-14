@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import React from 'react';
 
 import { GroupManager } from '@sidepanel/components/GroupManager/GroupManager';
@@ -45,9 +46,9 @@ describe('GroupManager', () => {
     expect(screen.getByText('2 groups')).toBeInTheDocument();
   });
 
-  it('should show saved lists section', () => {
+  it('should show group collections section', () => {
     render(<GroupManager />);
-    expect(screen.getByText('No saved lists yet.')).toBeInTheDocument();
+    expect(screen.getByText(/no group collections yet/i)).toBeInTheDocument();
   });
 
   it('should show save button when groups exist', () => {
@@ -64,7 +65,7 @@ describe('GroupManager', () => {
     expect(screen.getByRole('button', { name: /save current/i })).toBeDisabled();
   });
 
-  it('should show saved list name in list', () => {
+  it('should show collection name in list', () => {
     useGroupStore.setState({
       activeGroups: [group('test1')],
       savedLists: [
@@ -80,5 +81,30 @@ describe('GroupManager', () => {
     });
     render(<GroupManager />);
     expect(screen.getByText('My List')).toBeInTheDocument();
+  });
+
+  it('should confirm before deleting a collection', async () => {
+    const user = userEvent.setup();
+    useGroupStore.setState({
+      activeGroups: [group('test1')],
+      savedLists: [
+        {
+          id: '1',
+          name: 'My Collection',
+          groups: [group('test1')],
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      ],
+      isLoaded: true,
+    });
+    render(<GroupManager />);
+
+    await user.click(screen.getByRole('button', { name: 'Delete My Collection' }));
+    expect(screen.getByText('Delete group collection?')).toBeInTheDocument();
+    expect(useGroupStore.getState().savedLists).toHaveLength(1);
+
+    await user.click(screen.getByRole('button', { name: 'Delete collection' }));
+    await waitFor(() => expect(useGroupStore.getState().savedLists).toHaveLength(0));
   });
 });

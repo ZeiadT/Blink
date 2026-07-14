@@ -31,7 +31,7 @@ const SaveForm: React.FC<SaveFormProps> = ({ groupCount, onSave, onCancel }) => 
   return (
     <div className={styles.saveForm}>
       <label className={styles.saveLabel} htmlFor="list-name-input">
-        List name
+        Collection name
       </label>
       <input
         ref={inputRef}
@@ -46,7 +46,7 @@ const SaveForm: React.FC<SaveFormProps> = ({ groupCount, onSave, onCancel }) => 
         placeholder="e.g. Marketing Groups"
       />
       <Button variant="primary" onClick={handleSubmit} disabled={!name.trim()} fullWidth>
-        Save list ({groupCount} groups)
+        Save collection ({groupCount} groups)
       </Button>
     </div>
   );
@@ -63,6 +63,7 @@ export const SavedLists: React.FC = () => {
   const [showSaveModal, setShowSaveModal] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
+  const [pendingDelete, setPendingDelete] = useState<{ id: string; name: string } | null>(null);
 
   // Stable close handler — won’t change between keystrokes
   const handleCloseModal = useCallback(() => setShowSaveModal(false), []);
@@ -72,7 +73,7 @@ export const SavedLists: React.FC = () => {
       const result = await saveList(name);
       if (result.ok) {
         setShowSaveModal(false);
-        showToast('success', `List "${name}" saved.`);
+        showToast('success', `Collection "${name}" saved.`);
       } else {
         showToast('error', result.error ?? 'Could not save list.');
       }
@@ -85,7 +86,7 @@ export const SavedLists: React.FC = () => {
       const result = await loadList(listId);
       showToast(
         result.ok ? 'info' : 'error',
-        result.ok ? `Loaded "${name}".` : (result.error ?? 'Could not load list.'),
+        result.ok ? `Loaded "${name}".` : (result.error ?? 'Could not load collection.'),
       );
     },
     [loadList],
@@ -96,8 +97,9 @@ export const SavedLists: React.FC = () => {
       const result = await deleteList(listId);
       showToast(
         result.ok ? 'info' : 'error',
-        result.ok ? `Deleted "${name}".` : (result.error ?? 'Could not delete list.'),
+        result.ok ? `Deleted "${name}".` : (result.error ?? 'Could not delete collection.'),
       );
+      if (result.ok) setPendingDelete(null);
     },
     [deleteList],
   );
@@ -112,7 +114,7 @@ export const SavedLists: React.FC = () => {
       const result = await renameList(editingId, editName.trim());
       showToast(
         result.ok ? 'success' : 'error',
-        result.ok ? 'List renamed.' : (result.error ?? 'Could not rename list.'),
+        result.ok ? 'Collection renamed.' : (result.error ?? 'Could not rename collection.'),
       );
     }
     setEditingId(null);
@@ -124,7 +126,7 @@ export const SavedLists: React.FC = () => {
       <div className={styles.sectionHeader}>
         <div className={styles.sectionLabel}>
           <Bookmark size={14} />
-          <span>Saved lists</span>
+          <span>Group collections</span>
         </div>
         <Button
           variant="secondary"
@@ -138,7 +140,7 @@ export const SavedLists: React.FC = () => {
       </div>
 
       {savedLists.length === 0 ? (
-        <p className={styles.emptyText}>No saved lists yet.</p>
+        <p className={styles.emptyText}>No group collections yet. Add groups, then save your first collection.</p>
       ) : (
         <div className={styles.list}>
           {savedLists.map((list) => (
@@ -158,7 +160,7 @@ export const SavedLists: React.FC = () => {
                       }
                     }}
                     autoFocus
-                    aria-label="Rename list"
+                    aria-label="Rename collection"
                   />
                 ) : (
                   <span className={styles.itemName}>{list.name}</span>
@@ -173,7 +175,7 @@ export const SavedLists: React.FC = () => {
                   onClick={() => void handleLoad(list.id, list.name)}
                   disabled={isPersisting}
                   aria-label={`Load ${list.name}`}
-                  title="Load list"
+                  title="Load collection"
                 >
                   <FolderOpen size={14} />
                 </button>
@@ -188,7 +190,7 @@ export const SavedLists: React.FC = () => {
                 </button>
                 <button
                   className={`${styles.actionButton} ${styles.deleteButton}`}
-                  onClick={() => void handleDelete(list.id, list.name)}
+                  onClick={() => setPendingDelete({ id: list.id, name: list.name })}
                   aria-label={`Delete ${list.name}`}
                   title="Delete"
                   disabled={isPersisting}
@@ -202,13 +204,33 @@ export const SavedLists: React.FC = () => {
       )}
 
       {/* Save Modal — onClose is stable; SaveForm owns its own name state */}
-      <Modal isOpen={showSaveModal} onClose={handleCloseModal} title="Save group list">
+      <Modal isOpen={showSaveModal} onClose={handleCloseModal} title="Save group collection">
         <SaveForm
           groupCount={activeGroups.length}
           onSave={handleSave}
           onCancel={handleCloseModal}
         />
       </Modal>
+      {pendingDelete ? (
+        <Modal
+          isOpen
+          onClose={() => setPendingDelete(null)}
+          title="Delete group collection?"
+        >
+          <div className={styles.saveForm}>
+            <p>Delete “{pendingDelete.name}”? Running and completed campaigns stay unchanged.</p>
+            <Button variant="ghost" onClick={() => setPendingDelete(null)} fullWidth>Cancel</Button>
+            <Button
+              variant="danger"
+              onClick={() => void handleDelete(pendingDelete.id, pendingDelete.name)}
+              disabled={isPersisting}
+              fullWidth
+            >
+              Delete collection
+            </Button>
+          </div>
+        </Modal>
+      ) : null}
     </section>
   );
 };

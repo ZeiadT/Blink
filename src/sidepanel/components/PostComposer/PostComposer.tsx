@@ -37,7 +37,7 @@ export const PostComposer: React.FC = () => {
 
   const handleClear = useCallback(() => {
     clearDraft();
-    showToast('info', 'Campaign draft cleared. Saved posts were kept.');
+    showToast('info', 'Campaign draft cleared. Post templates were kept.');
   }, [clearDraft]);
 
   if (!isLoaded) {
