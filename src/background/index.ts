@@ -67,12 +67,12 @@ async function routeCampaignMessage(
   message: unknown,
 ): Promise<CampaignStatusResponse | CampaignHistoryResponse> {
   if (isStartCampaign(message)) {
-    const { postDraft, settings } = message.payload;
+    const { postDraft, settings, launch } = message.payload;
     const targetGroups =
       'targetGroups' in message.payload
         ? message.payload.targetGroups
         : message.payload.groupListId;
-    await orchestrator.start(postDraft, targetGroups, settings);
+    await orchestrator.start(postDraft, targetGroups, settings, launch);
     return createCampaignStatusResponse(await orchestrator.getStatus());
   }
 

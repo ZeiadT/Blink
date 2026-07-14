@@ -1,6 +1,7 @@
 import type {
   Campaign,
   CampaignHistoryEntry,
+  CampaignLaunchSnapshot,
   CampaignSettings,
   CampaignStatus,
   CampaignTargetClaim,
@@ -25,7 +26,13 @@ import {
   parseCampaignAlarmName,
 } from './scheduler';
 import { createExecutePostMessage, createStatusUpdateMessage } from '@shared/messages';
-import { cloneCampaignTargetGroups, isCampaignTargetGroups } from '@shared/campaignSnapshot';
+import {
+  cloneCampaignLaunch,
+  cloneCampaignTargetGroups,
+  isCampaignLaunch,
+  isCampaignTargetGroups,
+  shuffleCampaignTargetGroups,
+} from '@shared/campaignSnapshot';
 import { isValidDelayRange, normalizeDelayRange } from '@shared/timingPolicy';
 
 /** How long to wait for a content script response before marking a group failed. */
@@ -89,12 +96,16 @@ export class CampaignOrchestrator {
     postDraft: PostDraft,
     targetGroups: GroupEntry[] | string,
     settings: CampaignSettings,
+    launch?: CampaignLaunchSnapshot,
   ): Promise<void> {
     if (!isValidPostDraft(postDraft) || !isValidSettings(settings)) {
       throw new Error('Campaign draft or settings are invalid.');
     }
     if (Array.isArray(targetGroups) && !isCampaignTargetGroups(targetGroups)) {
       throw new Error('Campaign target groups are invalid.');
+    }
+    if (launch && !isCampaignLaunch(launch)) {
+      throw new Error('Campaign launch choices are invalid.');
     }
 
     // Snapshot caller-owned targets before the first await. A side-panel can
@@ -103,6 +114,7 @@ export class CampaignOrchestrator {
       ? cloneCampaignTargetGroups(targetGroups)
       : null;
     const suppliedSettingsSnapshot = { ...settings };
+    const suppliedLaunchSnapshot = launch ? cloneCampaignLaunch(launch) : undefined;
     await this.hydrateFromStorage();
 
     if (this.campaign?.status === 'running' || this.campaign?.status === 'paused') {
@@ -117,19 +129,24 @@ export class CampaignOrchestrator {
       throw new Error('No campaign target groups found.');
     }
 
+    const orderedGroups = suppliedLaunchSnapshot?.randomizeGroupOrder
+      ? shuffleCampaignTargetGroups(groups)
+      : cloneCampaignTargetGroups(groups);
+
     const runToken = generateId();
     this.campaign = {
       id: generateId(),
       postDraft: clonePostDraft(postDraft),
-      targetGroups: cloneCampaignTargetGroups(groups),
+      targetGroups: orderedGroups,
       status: 'running',
       currentIndex: 0,
       nextPendingIndex: 0,
       runToken,
-      totalGroups: groups.length,
+      totalGroups: orderedGroups.length,
       results: [],
       startedAt: Date.now(),
       settings: suppliedSettingsSnapshot,
+      ...(suppliedLaunchSnapshot ? { launch: suppliedLaunchSnapshot } : {}),
     };
 
     await this.persistAndBroadcast();
@@ -355,7 +372,8 @@ export class CampaignOrchestrator {
       !Array.isArray(campaign.results) ||
       !campaign.results.every(isValidPostResult) ||
       !isValidPostDraft(campaign.postDraft) ||
-      !isRecoverableSettings(campaign.settings)
+      !isRecoverableSettings(campaign.settings) ||
+      (campaign.launch !== undefined && !isCampaignLaunch(campaign.launch))
     ) {
       return null;
     }
@@ -610,6 +628,10 @@ export class CampaignOrchestrator {
           return result;
         }
 
+        if (result.retryable === false) {
+          return result;
+        }
+
         lastError = result.error ?? 'Post failed without error message';
       } catch (error) {
         lastError = error instanceof Error ? error.message : String(error);
@@ -854,6 +876,7 @@ function cloneCampaign(campaign: Campaign): Campaign {
     targetGroups: cloneCampaignTargetGroups(campaign.targetGroups),
     results: campaign.results.map((result) => ({ ...result })),
     settings: { ...campaign.settings },
+    ...(campaign.launch ? { launch: cloneCampaignLaunch(campaign.launch) } : {}),
     ...(campaign.activeTarget ? { activeTarget: { ...campaign.activeTarget } } : {}),
   };
 }
@@ -937,7 +960,8 @@ function isValidSettings(value: unknown): value is CampaignSettings {
     typeof maxRetries === 'number' &&
     Number.isInteger(maxRetries) &&
     isValidDelayRange(value) &&
-    maxRetries >= 0
+    maxRetries >= 0 &&
+    maxRetries <= 10
   );
 }
 
@@ -960,7 +984,8 @@ function isValidPostResult(value: unknown): value is PostResult {
     typeof value.groupUrl === 'string' &&
     (value.status === 'success' || value.status === 'failed' || value.status === 'skipped') &&
     typeof value.timestamp === 'number' &&
-    (value.error === undefined || typeof value.error === 'string')
+    (value.error === undefined || typeof value.error === 'string') &&
+    (value.retryable === undefined || typeof value.retryable === 'boolean')
   );
 }
 

@@ -12,7 +12,12 @@ import {
   GROUP_CATALOG_SCHEMA_VERSION,
   STORAGE_KEYS,
 } from '@shared/constants';
-import { cloneCampaignTargetGroups, isCampaignTargetGroups } from '@shared/campaignSnapshot';
+import {
+  cloneCampaignLaunch,
+  cloneCampaignTargetGroups,
+  isCampaignLaunch,
+  isCampaignTargetGroups,
+} from '@shared/campaignSnapshot';
 import { cloneCatalogGroups, migrateCatalog } from '@shared/groupCatalog';
 
 type LegacyCampaignRecord = Omit<Campaign, 'targetGroups'> & {
@@ -130,6 +135,8 @@ export function createCampaignHistoryEntry(campaign: Campaign): CampaignHistoryE
     totalGroups: campaign.totalGroups,
     results: campaign.results.map((result) => ({ ...result })),
     settings: { ...campaign.settings },
+    targetGroups: cloneCampaignTargetGroups(campaign.targetGroups),
+    ...(campaign.launch ? { launch: cloneCampaignLaunch(campaign.launch) } : {}),
     ...(campaign.startedAt === undefined ? {} : { startedAt: campaign.startedAt }),
     completedAt: campaign.completedAt ?? Date.now(),
     ...(campaign.error ? { error: campaign.error } : {}),
@@ -269,6 +276,10 @@ function cloneCampaignHistoryEntry(entry: CampaignHistoryEntry): CampaignHistory
     ...entry,
     results: entry.results.map((result) => ({ ...result })),
     settings: { ...entry.settings },
+    ...(entry.targetGroups
+      ? { targetGroups: cloneCampaignTargetGroups(entry.targetGroups) }
+      : {}),
+    ...(entry.launch ? { launch: cloneCampaignLaunch(entry.launch) } : {}),
   };
 }
 
@@ -285,6 +296,8 @@ function isValidCampaignHistoryEntry(value: unknown): value is CampaignHistoryEn
     Array.isArray(value.results) &&
     value.results.every(isValidPostResult) &&
     isValidHistorySettings(value.settings) &&
+    (value.targetGroups === undefined || isCampaignTargetGroups(value.targetGroups)) &&
+    (value.launch === undefined || isCampaignLaunch(value.launch)) &&
     Number.isFinite(value.completedAt) &&
     (value.startedAt === undefined || Number.isFinite(value.startedAt)) &&
     (value.error === undefined || typeof value.error === 'string')
@@ -316,7 +329,8 @@ function isValidPostResult(value: unknown): value is PostResult {
     typeof value.groupUrl === 'string' &&
     (value.status === 'success' || value.status === 'failed' || value.status === 'skipped') &&
     Number.isFinite(value.timestamp) &&
-    (value.error === undefined || typeof value.error === 'string')
+    (value.error === undefined || typeof value.error === 'string') &&
+    (value.retryable === undefined || typeof value.retryable === 'boolean')
   );
 }
 

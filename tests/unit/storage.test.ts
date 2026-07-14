@@ -124,6 +124,11 @@ describe('campaign history', () => {
     startedAt: 1,
     completedAt: 4,
     settings: { delayMinSeconds: 5, delayMaxSeconds: 10, maxRetries: 1 },
+    launch: {
+      postSource: { kind: 'saved', id: 'template-1', label: 'Weekly update' },
+      groupSource: { kind: 'saved', id: 'collection-1', label: 'Marketing groups' },
+      randomizeGroupOrder: true,
+    },
   };
 
   it('returns an empty history when no records exist', async () => {
@@ -140,6 +145,8 @@ describe('campaign history', () => {
       postText: 'First paragraph\r\n\r\nمرحبا 😀',
       mediaCount: 1,
       status: 'completed',
+      targetGroups: [{ url: 'https://facebook.com/groups/history' }],
+      launch: completedCampaign.launch,
     });
     expect(JSON.stringify(entry)).not.toContain('should-not-be-stored');
     expect(entry).not.toHaveProperty('postDraft');
