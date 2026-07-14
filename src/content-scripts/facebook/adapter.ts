@@ -3,7 +3,7 @@
 
 import type { PlatformAdapter, PostDraft, PostResult } from '@shared/types';
 import { isValidFacebookGroupUrl } from '@shared/validators';
-import { isGroupPage, getGroupInfo } from './detector';
+import { isComposerAvailable, isGroupPage, getGroupInfo } from './detector';
 import {
   openComposer,
   typeText,
@@ -40,6 +40,17 @@ class FacebookAdapter implements PlatformAdapter {
           groupUrl,
           status: 'failed',
           error: 'Not on a valid Facebook group page',
+          retryable: false,
+          timestamp: Date.now(),
+        };
+      }
+
+      if (!isComposerAvailable()) {
+        return {
+          groupUrl,
+          status: 'failed',
+          error: 'Posting is unavailable. The group may be inaccessible or you may not have permission to post.',
+          retryable: false,
           timestamp: Date.now(),
         };
       }
